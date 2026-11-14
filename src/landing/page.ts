@@ -202,7 +202,7 @@ ${o.lang === "fr" && !o.frReviewedBy ? html`<p class="review-note" role="note">$
     <div class="plans">${PLANS.map((p) => planCard(o, p, open && p.id === selected))}</div>
     <p class="fine center">${c.plansFine}</p>
 
-    <div id="start" class="start${open ? " open" : ""}" data-start aria-labelledby="start-title">
+    <div id="start" class="start${open ? " open" : ""}" data-start role="region" aria-labelledby="start-title">
       <div class="start-inner">
         <div class="start-copy">
           <h2 id="start-title">${c.startTitle}</h2>
