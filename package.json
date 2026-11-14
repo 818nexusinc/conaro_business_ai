@@ -1,0 +1,33 @@
+{
+  "name": "conaro-business-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CONARO Business AI: an AI workforce for each business on the CONARO marketplace. Multi-tenant, simulation-first, interoperates with the marketplace and the CONARO operating system over the signed link.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test",
+    "start": "tsx scripts/serve.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "tick": "tsx scripts/tick.ts",
+    "tenant": "tsx scripts/tenant.ts",
+    "link-provider": "tsx scripts/link-provider.ts",
+    "demo": "tsx scripts/demo.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "postgres": "^4.1.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@types/node": "^22.20.5",
+    "typescript": "7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
