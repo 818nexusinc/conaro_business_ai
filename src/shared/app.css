@@ -75,3 +75,5 @@ button.secondary { background: var(--muted-bg); color: var(--text); } button.dan
   main { padding: 16px; }
 }
 code.setup-key { font-size: 16px; letter-spacing: 1px; background: var(--muted-bg); padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+
+.top-actions { display: flex; align-items: center; gap: 16px; }

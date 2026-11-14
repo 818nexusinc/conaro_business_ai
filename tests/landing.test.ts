@@ -146,8 +146,11 @@ describe("pilot sign-up", () => {
     await start({ signupOpen: true });
     const r = await signup(form({ plan: "professional", marketing: "yes", lang: "fr" }), "?lang=fr");
     expect(r.status).toBe(303);
-    const cookie = (r.headers.get("set-cookie") ?? "").split(";")[0]!;
-    expect(await (await fetch(`${base}/`, { headers: { cookie } })).text()).toContain("Pilot Cleaning Co");
+    const cookies = r.headers.getSetCookie().map((c) => c.split(";")[0]!);
+    expect(cookies).toContain("bai_lang=fr");
+    const home = await (await fetch(`${base}/`, { headers: { cookie: cookies.join("; ") } })).text();
+    expect(home).toContain("Pilot Cleaning Co");
+    expect(home).toContain('<html lang="fr-CA">');
     const s = (await db.query<{ plan: string; status: string; marketing_consent: boolean; consent_wording: string }>(
       "select sub.plan, sub.status, g.marketing_consent, g.consent_wording from bai_signups g join bai_subscriptions sub on sub.tenant_id = g.tenant_id"))[0]!;
     expect(s).toMatchObject({ plan: "professional", status: "trial", marketing_consent: true });

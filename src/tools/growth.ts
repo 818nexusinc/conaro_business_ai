@@ -170,8 +170,8 @@ export async function growthCommandCentre(tdb: TenantDb, timeZone: string, from:
     revenueAttributedToCampaigns: attributed.n
       ? { label: "ACTUAL", cents: Number(attributed.cents), source: `${plural(attributed.n, "invoice")} from enquiries that carried a campaign tracking code`, note: "Attribution: last tracked campaign on the enquiry." } as Figure
       : { label: "UNAVAILABLE", reason: "no invoiced job came from an enquiry with a campaign tracking code" } as Figure,
-    marketingReach: has("facebook") || has("instagram") ? { label: "UNAVAILABLE", reason: "engagement import is not built yet" } as Figure : notConnected("No social account"),
-    socialEngagement: has("facebook") || has("instagram") ? { label: "UNAVAILABLE", reason: "engagement import is not built yet" } as Figure : notConnected("No social account"),
+    marketingReach: has("facebook") || has("instagram") ? { label: "UNAVAILABLE", reason: "engagement import is not built yet" } as Figure : ({ label: "UNAVAILABLE", reason: "no social account is connected" } as Figure),
+    socialEngagement: has("facebook") || has("instagram") ? { label: "UNAVAILABLE", reason: "engagement import is not built yet" } as Figure : ({ label: "UNAVAILABLE", reason: "no social account is connected" } as Figure),
     websiteVisits: has("google-analytics") ? { label: "UNAVAILABLE", reason: "analytics import is not built yet" } as Figure : notConnected("Google Analytics"),
     marketplaceProfileVisits: has("conaro-marketplace") ? { label: "UNAVAILABLE", reason: "profile-visit feed from the marketplace is not built yet" } as Figure : notConnected("The CONARO marketplace feed"),
   };

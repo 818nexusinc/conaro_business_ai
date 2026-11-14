@@ -51,6 +51,7 @@ import { CSS, LANDING_CSS, LANDING_JS, MANROPE_WOFF2_BASE64 } from "../generated
 import { landingPage } from "../landing/page.ts";
 import { captionsVtt, findExplainer } from "../landing/presenters.ts";
 import { langCookie, resolveLang, type Lang } from "../i18n.ts";
+import { currentLang, runInLang, translateHtml, translatePlain } from "./i18n.ts";
 import { signUp } from "../landing/signup.ts";
 
 const MANROPE = Buffer.from(MANROPE_WOFF2_BASE64, "base64");
@@ -87,7 +88,17 @@ function headers(res: ServerResponse, secure: boolean) {
   if (secure) res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
 }
 
-const send = (res: ServerResponse, status: number, body: string, type = "text/html; charset=utf-8") => { res.statusCode = status; res.setHeader("Content-Type", type); res.end(body); };
+/** Sends a response; for a French request, English control-centre pages and plain errors are translated (see portal/i18n.ts). */
+const send = (res: ServerResponse, status: number, body: string, type = "text/html; charset=utf-8", translate = true) => {
+  res.statusCode = status; res.setHeader("Content-Type", type);
+  if (translate && currentLang() === "fr") {
+    if (type.startsWith("text/html") && body.includes('<html lang="en-CA">')) { body = translateHtml(body); res.setHeader("Content-Language", "fr-CA"); }
+    else if (type.startsWith("text/plain")) body = translatePlain(body);
+  }
+  res.end(body);
+};
+/** Adds a cookie without dropping one already set on this response (the language cookie). */
+const addCookie = (res: ServerResponse, c: string) => { const prev = res.getHeader("Set-Cookie"); res.setHeader("Set-Cookie", prev === undefined ? [c] : [...(Array.isArray(prev) ? prev : [String(prev)]), c]); };
 const redirect = (res: ServerResponse, to: string) => { res.statusCode = 303; res.setHeader("Location", to); res.end(); };
 const cents = (v: string | null) => { if (!v?.trim()) return undefined; const n = Number(v.replaceAll(/[$,\s]/g, "")); if (!Number.isFinite(n) || n < 0) throw new PermanentError(`not an amount: ${v}`); return Math.round(n * 100); };
 const list = (v: string | null, sep = /,/) => (v ?? "").split(sep).map((s) => s.trim()).filter(Boolean);
@@ -134,17 +145,12 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
   const mediaOrigins = [opts.landing?.videoBase, opts.landing?.audioBase].filter((u): u is string => Boolean(u)).map((u) => new URL(u).origin);
   const media = [...new Set(mediaOrigins)].map((o) => ` ${o}`).join("");
   const LANDING_CSP = `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'${media}; media-src 'self'${media}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
-  const pageLang = (req: IncomingMessage, url: URL, res: ServerResponse): Lang => {
-    const r = resolveLang(url.searchParams.get("lang"), cookie(req, "bai_lang"), req.headers["accept-language"]);
-    if (r.remember) res.setHeader("Set-Cookie", langCookie(r.lang, secure));
-    return r.lang;
-  };
   const sendLanding = (res: ServerResponse, lang: Lang, status: number, values: Record<string, string>, error?: string, plan?: string) => {
     res.setHeader("Content-Security-Policy", LANDING_CSP);
     res.setHeader("Content-Language", lang === "fr" ? "fr-CA" : "en-CA");
     res.setHeader("Vary", "Cookie, Accept-Language");
     return send(res, status, landingPage({ lang, signupOpen: Boolean(opts.landing?.signupOpen), videoBase: opts.landing?.videoBase, audioBase: opts.landing?.audioBase,
-      frReviewedBy: opts.landing?.frReviewedBy, values, error, plan }));
+      frReviewedBy: opts.landing?.frReviewedBy, values, error, plan }), "text/html; charset=utf-8", false);
   };
 
   const ACTIONS: Record<string, Action> = {
@@ -279,14 +285,14 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
     const unsub = path.match(/^\/u\/([A-Za-z0-9_.-]{20,800})$/);
     if (unsub) {
       const v = verifyUnsubscribeToken(unsub[1]!, opts.linkSecret);
-      if (!v) return send(res, 400, P.publicPage("Link not recognised", "This unsubscribe link is not valid. Please contact the business directly."));
+      if (!v) return send(res, 400, P.bilingualPage("Link not recognised", "This unsubscribe link is not valid. Please contact the business directly."));
       const name = await withTenant(db, v.tenantId, async (t) => (await t.query<{ name: string }>("select name from bai_tenants"))[0]?.name).catch(() => undefined);
-      if (!name) return send(res, 404, P.publicPage("Link not recognised", "This business is no longer on CONARO."));
+      if (!name) return send(res, 404, P.bilingualPage("Link not recognised", "This business is no longer on CONARO."));
       if (method === "POST") {
         await withTenant(db, v.tenantId, (t) => unsubscribeCustomer(t, v.email, "unsubscribe-link"));
-        return send(res, 200, P.publicPage("You're unsubscribed", `${v.email} will not receive marketing messages from ${name} again. / Vous ne recevrez plus de messages de marketing de ${name}.`));
+        return send(res, 200, P.bilingualPage("You're unsubscribed", `${v.email} will not receive marketing messages from ${name} again. / Vous ne recevrez plus de messages de marketing de ${name}.`));
       }
-      return send(res, 200, P.publicPage("Unsubscribe", `Stop marketing messages from ${name} to ${v.email}?`, P.raw(`<form method="post"><button type="submit">Unsubscribe / Se désabonner</button></form>`)));
+      return send(res, 200, P.bilingualPage("Unsubscribe", `Stop marketing messages from ${name} to ${v.email}?`, P.raw(`<form method="post"><button type="submit">Unsubscribe / Se désabonner</button></form>`)));
     }
 
     // Scheduled agents' cycle. Vercel Cron sends "Authorization: Bearer $CRON_SECRET" with a GET.
@@ -325,7 +331,7 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
       const r = await verifySsoToken(db, opts.marketplaceLinkSecret, url.searchParams.get("t") ?? "");
       if (!r.ok) return send(res, 401, P.publicPage("Could not sign you in", r.reason));
       const token = await createSession(db, r.userId, r.tenantId, { ip: ip(req), via: "marketplace" });
-      res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
+      addCookie(res, `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
       return redirect(res, "/");
     }
 
@@ -378,7 +384,7 @@ ${P.credentialsTable(r.credentials)}`));
       try {
         const r = await signUp(db, Object.fromEntries(f.entries()), ip(req));
         const token = await createSession(db, r.userId, r.tenantId, { ip: ip(req), via: "password" });
-        res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
+        addCookie(res, `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
         return redirect(res, `/settings?ok=${encodeURIComponent("Welcome! Your pilot workspace is ready. Start with your services, prices and hours below.")}#main`);
       } catch (err) {
         if (err instanceof ZodError) return sendLanding(res, lang, 400, form, [...new Set(err.issues.map((i) => i.message))].join(" | "));
@@ -393,7 +399,7 @@ ${P.credentialsTable(r.credentials)}`));
         const f = await readForm(req);
         const r = await portalLogin(db, f.get("email") ?? "", f.get("password") ?? "", ip(req));
         if (!r.ok) return send(res, r.reason === "rate_limited" ? 429 : 401, P.loginPage(r.reason === "rate_limited" ? "Too many attempts. Try again in 15 minutes." : "Email or password not recognised."));
-        res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(r.token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
+        addCookie(res, `${COOKIE}=${encodeURIComponent(r.token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
         return redirect(res, "/");
       }
     }
@@ -401,7 +407,7 @@ ${P.credentialsTable(r.credentials)}`));
     const token = cookie(req, COOKIE);
     const session = await portalSession(db, token);
     // Signed-out visitors to the home page see the landing page; signed-in owners get their control centre.
-    if (!session && path === "/" && (method === "GET" || method === "HEAD") && opts.landing) return sendLanding(res, pageLang(req, url, res), 200, {}, undefined, url.searchParams.get("plan") ?? undefined);
+    if (!session && path === "/" && (method === "GET" || method === "HEAD") && opts.landing) return sendLanding(res, currentLang(), 200, {}, undefined, url.searchParams.get("plan") ?? undefined);
     if (!session) return method === "GET" ? redirect(res, "/login") : send(res, 401, "Sign in again.", "text/plain");
 
     if (method === "POST") {
@@ -409,7 +415,7 @@ ${P.credentialsTable(r.credentials)}`));
       if (!csrfOk(session, f.get("_csrf"))) return send(res, 403, "Form expired. Go back, reload and try again.", "text/plain");
       if (path === "/logout") {
         await portalLogout(db, token);
-        res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? "; Secure" : ""}`);
+        addCookie(res, `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? "; Secure" : ""}`);
         return redirect(res, "/login");
       }
       if (path === "/do/member") {
@@ -444,12 +450,17 @@ ${P.credentialsTable(r.credentials)}`));
   }
 
   return (req, res) => {
-    handle(req, res).catch((err) => {
+    // The page language: ?lang= (remembered), then the remembered choice, then the browser's preference.
+    const q = /[?&]lang=(en|fr)(?:&|$)/.exec(req.url ?? "")?.[1] ?? null;
+    const l = resolveLang(q, cookie(req, "bai_lang"), req.headers["accept-language"]);
+    if (l.remember) res.setHeader("Set-Cookie", langCookie(l.lang, secure));
+    res.setHeader("Vary", "Cookie, Accept-Language");
+    runInLang(l.lang, () => handle(req, res).catch((err) => {
       const status = err instanceof HttpError ? err.status : err instanceof AccessDeniedError ? 403 : 500;
       if (status === 500) console.error("[business-ai portal]", err);
       if (!res.headersSent) send(res, status, status === 500 ? "Something went wrong. It has been logged." : (err as Error).message, "text/plain");
       else res.end();
-    });
+    }));
   };
 }
 

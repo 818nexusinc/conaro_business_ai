@@ -1,4 +1,6 @@
-import { html, raw, table, badge, statusBadge, when, jsonBlock, type Html } from "../shared/html.ts";
+import { html, raw, table, badge, statusBadge, jsonBlock, type Html } from "../shared/html.ts";
+import { currentLang, money, when, PLANNED_AGENTS_FR } from "./i18n.ts";
+import { AGENT_COPY } from "../landing/agents-copy.ts";
 import { one } from "../shared/db.ts";
 import type { TenantDb } from "../tenancy.ts";
 import type { AgentDeps } from "../agent-context.ts";
@@ -12,7 +14,7 @@ import { verifyTenantAudit } from "../audit.ts";
 import { runTool } from "../tools/index.ts";
 import { financialCommandCentre, profitAndLoss, type Figure } from "../tools/finance.ts";
 import { growthCommandCentre } from "../tools/growth.ts";
-import { addDays, isoDate, localParts, money } from "../time.ts";
+import { addDays, isoDate, localParts } from "../time.ts";
 import { can, type PortalSession } from "./auth.ts";
 
 export interface PortalCtx {
@@ -56,6 +58,14 @@ export function fig(input: Figure | LooseFigure | undefined): Html {
   return html`<strong>${money(f.cents ?? 0)}</strong> ${badge(f.label, tone)}${f.source ? html` <span class="muted">${f.source}</span>` : ""}${f.note ? html`<br><span class="muted">${f.note}</span>` : ""}`;
 }
 
+/** Link to the same page in the other language (the choice is remembered in a cookie). */
+export function langSwitch(path: string, query?: URLSearchParams): Html {
+  const other = currentLang() === "fr" ? "en" : "fr";
+  const q = new URLSearchParams(query);
+  q.delete("ok"); q.delete("err"); q.set("lang", other);
+  return html`<a class="lang-switch" href="${path}?${q.toString()}" lang="${other === "fr" ? "fr-CA" : "en-CA"}" hreflang="${other === "fr" ? "fr-CA" : "en-CA"}">${other === "fr" ? "Français" : "English"}</a>`;
+}
+
 export function layout(ctx: PortalCtx, title: string, body: Html): string {
   const current = (href: string) => (href === "/" ? ctx.path === "/" : ctx.path.startsWith(href));
   return html`<!doctype html>
@@ -67,7 +77,7 @@ ${NAV.filter((n) => !n.perm || can(ctx.session.role, n.perm)).map((n) => html`<a
 </div></nav>
 <main id="main">
 <header class="top"><div class="muted">${ctx.session.name} · ${ctx.session.role}</div>
-<form method="post" action="/logout">${csrf(ctx)}<button class="secondary" type="submit">Sign out</button></form></header>
+<div class="top-actions">${langSwitch(ctx.path, ctx.query)}<form method="post" action="/logout">${csrf(ctx)}<button class="secondary" type="submit">Sign out</button></form></div></header>
 ${ctx.tenant.is_demo ? html`<div class="banner prod" role="status">DEMO WORKSPACE: every business, customer, booking, invoice and bank line here is invented for testing.</div>` : ""}
 <div class="banner sim" role="status">SIMULATION: no message, post, payment or purchase leaves CONARO Business AI yet. External actions are recorded and labelled simulated.</div>
 ${ctx.tenant.paused ? html`<div class="error" role="alert">All agents are paused${ctx.tenant.paused_reason ? html`: ${ctx.tenant.paused_reason}` : ""}.
@@ -83,7 +93,7 @@ ${body}
 export function loginPage(error?: string): string {
   return html`<!doctype html><html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · CONARO Business AI</title><link rel="stylesheet" href="/static/app.css"><meta name="robots" content="noindex"></head>
-<body><main class="login" id="main"><h1>CONARO Business AI</h1><p class="muted">Your business. Your AI workforce.</p>
+<body><main class="login" id="main"><p>${langSwitch("/login")}</p><h1>CONARO Business AI</h1><p class="muted">Your business. Your AI workforce.</p>
 ${error ? html`<div class="error" role="alert">${error}</div>` : ""}
 <form class="stack" method="post" action="/login">
 <label>Email <input name="email" type="email" autocomplete="username" required></label>
@@ -95,6 +105,11 @@ export function publicPage(title: string, message: string, form?: Html): string 
   return html`<!doctype html><html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title><link rel="stylesheet" href="/static/app.css"><meta name="robots" content="noindex"></head>
 <body><main class="login" id="main"><h1>${title}</h1><p>${message}</p>${form ?? ""}</main></body></html>`.value;
+}
+
+/** A public page for a business's own customers (e.g. unsubscribe): shown in both languages, never machine-switched. */
+export function bilingualPage(title: string, message: string, form?: Html): string {
+  return publicPage(title, message, form).replace('<html lang="en-CA">', '<html lang="en-CA" data-bilingual>');
 }
 
 const today = (ctx: PortalCtx) => localParts(new Date(), ctx.tenant.time_zone).date;
@@ -234,7 +249,7 @@ ${can(ctx.session.role, "enquiry.add") ? html`<h2>Record an enquiry</h2><p class
 <label>Service <select name="serviceId"><option value="">Not sure</option>${services.map((s) => html`<option value="${s.id}">${s.name}</option>`)}</select></label>
 <label>What they need <textarea name="description" required rows="3" maxlength="5000"></textarea></label><label>Area <input name="area" maxlength="80"></label>
 <label>Preferred date <input type="date" name="desiredDate"></label><label>Preferred time <input type="time" name="desiredTime"></label>
-<label>Channel <select name="channel">${["phone", "email", "website", "walk-in", "referral", "social"].map((c) => html`<option>${c}</option>`)}</select></label>
+<label>Channel <select name="channel">${["phone", "email", "website", "walk-in", "referral", "social"].map((c) => html`<option value="${c}">${c}</option>`)}</select></label>
 <label><input type="checkbox" name="consent" value="yes"> The customer explicitly agreed to receive marketing messages</label>
 <button type="submit">Save enquiry</button></form>` : ""}`);
 }
@@ -258,12 +273,18 @@ export async function agentsPage(ctx: PortalCtx): Promise<string> {
   const counts = await ctx.tdb.query<{ agent_id: string; n: number }>("select agent_id, count(*)::int n from bai_actions where created_at > now() - interval '30 days' group by 1");
   const pack = industryPack(ctx.tenant.industry);
   const cfg = can(ctx.session.role, "agents.configure");
+  const fr = currentLang() === "fr";
+  const role = (a: (typeof AGENTS)[number]) => {
+    if (!fr) return html`${a.role}<br><span class="muted">${a.rules.join(" ")}</span>`;
+    const c = AGENT_COPY.find((x) => x.id === a.id);
+    return c ? html`${c.summary.fr}<br><span class="muted">${c.how.fr.join(" ")}</span>` : html`${PLANNED_AGENTS_FR[a.id]?.role ?? a.role}`;
+  };
   return layout(ctx, "AI workforce", html`
-<p class="muted">Autonomy: <strong>draft only</strong> (nothing is sent), <strong>ask first</strong> (every external action waits for approval), <strong>within my rules</strong> (level-2 actions run when your rules allow), <strong>autonomous</strong> (same rules; for future use). Level-3 actions always wait for the owner.</p>
+${fr ? html`<p class="muted">Autonomie : <strong>brouillon seulement</strong> (rien n'est envoyé), <strong>demander d'abord</strong> (chaque action externe attend une approbation), <strong>selon mes règles</strong> (les actions de niveau 2 s'exécutent lorsque vos règles le permettent), <strong>autonome</strong> (mêmes règles; pour usage futur). Les actions de niveau 3 attendent toujours le propriétaire.</p>` : html`<p class="muted">Autonomy: <strong>draft only</strong> (nothing is sent), <strong>ask first</strong> (every external action waits for approval), <strong>within my rules</strong> (level-2 actions run when your rules allow), <strong>autonomous</strong> (same rules; for future use). Level-3 actions always wait for the owner.</p>`}
 ${table(["#", "Agent", "Role", "Status", "In plan", "Relevant to your industry", "Actions (30 days)", "Settings"], AGENTS.map((a) => {
     const r = rows.find((x) => x.agent_id === a.id);
     const entitled = isEntitled(sub.plan, sub.addons, a.id);
-    return [html`${a.number}`, html`<strong>${a.name}</strong>`, html`${a.role}<br><span class="muted">${a.rules.join(" ")}</span>`,
+    return [html`${a.number}`, html`<strong>${a.name}</strong>`, role(a),
       a.status === "operational" ? statusBadge(r?.enabled ? "active" : "cancelled") : badge(`planned (phase ${a.phase})`, "muted"),
       entitled ? badge("yes", "ok") : badge("upgrade", "muted"), pack.agents.includes(a.id) ? html`yes` : html`<span class="muted">optional</span>`,
       html`${counts.find((c) => c.agent_id === a.id)?.n ?? 0}`,
