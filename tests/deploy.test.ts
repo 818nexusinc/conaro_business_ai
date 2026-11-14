@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import type { Db } from "../src/shared/db.ts";
@@ -18,6 +18,9 @@ describe("deployment", () => {
     const v = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { crons: { path: string; schedule: string }[]; buildCommand: string; outputDirectory: string; rewrites: unknown[] };
     expect(v.buildCommand).toBe("npm run build");
     expect(v.outputDirectory).toBe("public");
+    // A root Dockerfile makes Vercel pick its Container preset; framework null overrides a project already set to it.
+    expect((v as { framework?: unknown }).framework).toBeNull();
+    expect(existsSync(new URL("../Dockerfile", import.meta.url))).toBe(false);
     expect(v.rewrites).toEqual([{ source: "/(.*)", destination: "/api" }]);
     expect(readFileSync(new URL("../api/index.mjs", import.meta.url), "utf8")).toContain('export { default } from "../dist/handler.mjs"');
     expect(readFileSync(new URL("../public/robots.txt", import.meta.url), "utf8")).toContain("Disallow: /");

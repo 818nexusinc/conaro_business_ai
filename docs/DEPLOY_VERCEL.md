@@ -49,6 +49,13 @@ Vercel's limits ([R60](REFERENCE_CHECKS.md)): **Hobby** allows cron jobs **once 
 
 If a variable is missing or wrong, every page shows the problem (names only, never values) instead of failing silently.
 
+## If a build goes down the wrong path
+
+| Build log shows | Cause | Fix (already in the repository) |
+|---|---|---|
+| `No Output Directory named "public"` | Built as a static site | `vercel.json` sets `outputDirectory: "public"` and rewrites every path to `api/index.mjs` |
+| `buildah` / `container` steps, then `NAME_INVALID` when pushing an image | Vercel's **Container** preset, picked because a `Dockerfile` was at the root when the project was created | The Dockerfile is in `docker/` and `vercel.json` sets `"framework": null`, which overrides the project's preset. Optionally also set Settings → Build and Deployment → Framework Preset to **Other**. |
+
 ## Local equivalent
 
 ```bash
