@@ -82,7 +82,6 @@ function agentPanel(o: LandingOptions, a: AgentCopy, selected: boolean, i: numbe
   return html`<section class="panel dept-${a.dept}" role="tabpanel" id="agent-${a.id}" aria-labelledby="tab-${a.id}" tabindex="0"${selected ? "" : html` data-unselected`}>
   <div class="agent-card">
     <header class="agent-head">
-      <p class="dept-chip">${svg(ICON[a.dept])}<span>${DEPTS[a.dept][o.lang]}</span></p>
       <h3>${a.name[o.lang]}</h3>
       <p class="summary">${a.summary[o.lang]}</p>
     </header>
@@ -188,8 +187,11 @@ ${o.lang === "fr" && !o.frReviewedBy ? html`<p class="review-note" role="note">$
       <p class="lead dark">${c.teamLead}</p>
     </div>
     <div class="tabs" data-tabs data-reveal>
-      <div class="tablist" role="tablist" aria-label="${c.tabsLabel}" aria-orientation="vertical">
-        ${depts.map((d) => html`<p class="tab-group dept-${d}" aria-hidden="true">${svg(ICON[d])}${DEPTS[d][o.lang]}</p>${AGENT_COPY.filter((a) => a.dept === d).map((a) => html`<a role="tab" class="dept-${a.dept}" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}"><span class="dot" aria-hidden="true"></span>${a.name[o.lang]}</a>`)}`)}
+      <div class="dept-bar js-only" role="group" aria-label="${c.deptsLabel}">
+        ${depts.map((d) => html`<button type="button" class="dept-pill dept-${d}" data-dept="${d}" aria-pressed="${d === "front" ? "true" : "false"}">${svg(ICON[d])}<span>${DEPTS[d][o.lang]}</span><span class="n" aria-hidden="true">${AGENT_COPY.filter((a) => a.dept === d).length}</span></button>`)}
+      </div>
+      <div class="tablist" role="tablist" aria-label="${c.tabsLabel}" aria-orientation="horizontal">
+        ${ordered.map((a) => html`<a role="tab" class="agent-chip dept-${a.dept}" data-dept="${a.dept}" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}"><img src="/media/${AGENT_PHOTO[a.id]!.file}-thumb.jpg" width="40" height="40" alt="" loading="lazy" decoding="async"><span>${a.name[o.lang]}</span></a>`)}
       </div>
       <div class="panels">${ordered.map((a, i) => agentPanel(o, a, a.id === "customer-service", i, ordered))}</div>
     </div>

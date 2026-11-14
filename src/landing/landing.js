@@ -146,7 +146,14 @@
   Array.prototype.forEach.call(document.querySelectorAll("[data-tabs]"), function (root) {
     var tabs = Array.prototype.slice.call(root.querySelectorAll('[role="tab"]'));
     var panels = tabs.map(function (t) { return document.getElementById(t.getAttribute("aria-controls")); });
+    var pills = Array.prototype.slice.call(root.querySelectorAll("[data-dept]")).filter(function (el) { return el.classList.contains("dept-pill"); });
+    // Show only the chosen team's agents (the pills are a filter; the agent chips are the tabs).
+    function showDept(dept) {
+      pills.forEach(function (p) { p.setAttribute("aria-pressed", p.getAttribute("data-dept") === dept ? "true" : "false"); });
+      tabs.forEach(function (t) { t.hidden = pills.length > 0 && t.getAttribute("data-dept") !== dept; });
+    }
     function select(i, focus) {
+      showDept(tabs[i].getAttribute("data-dept"));
       tabs.forEach(function (t, k) {
         var on = k === i;
         t.setAttribute("aria-selected", on ? "true" : "false");
@@ -169,6 +176,12 @@
         else if (e.key === "End") to = n - 1;
         else if (e.key === " " || e.key === "Enter") { e.preventDefault(); select(i, false); return; }
         if (to !== null) { e.preventDefault(); select(to, true); }
+      });
+    });
+    pills.forEach(function (p) {
+      p.addEventListener("click", function () {
+        var first = tabs.findIndex(function (t) { return t.getAttribute("data-dept") === p.getAttribute("data-dept"); });
+        if (first >= 0) { select(first, false); if (history.replaceState) history.replaceState(null, "", "#" + panels[first].id); }
       });
     });
     // "Previous agent" / "Next agent" inside each card.
