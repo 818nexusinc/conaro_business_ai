@@ -23,14 +23,18 @@ Run it for real (simulation mode):
 ```bash
 cp .env.example .env              # set BAI_UNSUBSCRIBE_SECRET (and DATABASE_URL for PostgreSQL)
 BAI_OWNER_PASSWORD='…' npm run tenant -- --name "Sparkle Cleaning" --slug sparkle --industry residential-cleaning --plan growth --email owner@example.com --owner "Owner Name"
-npm start                         # control centre + agents' cycle
+npm start                         # control centre + agents' cycle (long-running host)
 ```
+
+On Vercel: see [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md).
+
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
 | [docs/PLAN.md](docs/PLAN.md) | Audit, architecture, tenant isolation, agents, autonomy, workflows, industry packs, subscriptions, costs, phase status |
+| [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md) | Deploying on Vercel: database, environment variables, the daily cron and plan limits, checks |
 | [docs/INTEROP.md](docs/INTEROP.md) | How it works with the marketplace and the operating system: protocol, provider feed contract, sign-in hand-over, BOS summary, shared database |
 | [docs/REFERENCE_CHECKS.md](docs/REFERENCE_CHECKS.md) | Official sources relied on (CRA GST/HST) and how they were checked |
 | [CLAUDE.md](CLAUDE.md) | Working agreement for changes to this repository |

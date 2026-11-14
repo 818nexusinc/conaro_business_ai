@@ -1,5 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { readFileSync } from "node:fs";
 import { ZodError } from "zod";
 import type { Db } from "../shared/db.ts";
 import { json } from "../shared/db.ts";
@@ -24,7 +24,7 @@ import { verifySsoToken } from "../interop/sso.ts";
 import { can, createSession, csrfOk, portalLogin, portalLogout, portalSession, SESSION_HOURS, type Permission, type PortalSession } from "./auth.ts";
 import * as P from "./pages.ts";
 
-const CSS = readFileSync(new URL("../shared/app.css", import.meta.url), "utf8");
+import { CSS } from "../generated/assets.ts";
 const COOKIE = "bai_session";
 const MAX_BODY = 2_200_000;
 
@@ -40,6 +40,8 @@ export interface PortalOptions {
   marketplaceLinkSecret?: string;
   /** Shared key with the CONARO operating system (summary, handshake). */
   bosLinkSecret?: string;
+  /** Scheduled trigger (e.g. Vercel Cron): GET /api/cron/tick with "Authorization: Bearer <secret>" runs one cycle. */
+  cron?: { secret: string; run: () => Promise<unknown> };
 }
 
 function headers(res: ServerResponse, secure: boolean) {
@@ -217,6 +219,17 @@ export function createPortalServer(opts: PortalOptions): Server {
         return send(res, 200, P.publicPage("You're unsubscribed", `${v.email} will not receive marketing messages from ${name} again. / Vous ne recevrez plus de messages de marketing de ${name}.`));
       }
       return send(res, 200, P.publicPage("Unsubscribe", `Stop marketing messages from ${name} to ${v.email}?`, P.raw(`<form method="post"><button type="submit">Unsubscribe / Se désabonner</button></form>`)));
+    }
+
+    // Scheduled agents' cycle. Vercel Cron sends "Authorization: Bearer $CRON_SECRET" with a GET.
+    if (path === "/api/cron/tick") {
+      if (method !== "GET") return send(res, 405, JSON.stringify({ error: "GET only" }), "application/json");
+      if (!opts.cron) return send(res, 503, JSON.stringify({ error: "the scheduled cycle is not set up (CRON_SECRET)" }), "application/json");
+      const expected = Buffer.from(`Bearer ${opts.cron.secret}`);
+      const given = Buffer.from(String(req.headers.authorization ?? ""));
+      if (given.length !== expected.length || !timingSafeEqual(given, expected)) return send(res, 401, JSON.stringify({ error: "unauthorised" }), "application/json");
+      const result = await opts.cron.run();
+      return send(res, 200, JSON.stringify(result), "application/json");
     }
 
     // Signed, read-only endpoints for the other CONARO applications (no session: the signature is the credential).

@@ -16,7 +16,9 @@
     "tick": "tsx scripts/tick.ts",
     "tenant": "tsx scripts/tenant.ts",
     "link-provider": "tsx scripts/link-provider.ts",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx scripts/demo.ts",
+    "gen:assets": "tsx scripts/gen-assets.ts",
+    "build": "tsx scripts/gen-assets.ts && esbuild src/vercel-entry.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server.mjs --log-level=warning"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
@@ -27,6 +29,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.16",
     "@types/node": "^22.20.5",
+    "esbuild": "0.28.2",
     "typescript": "7.0.2",
     "vitest": "^5.1.0"
   }

@@ -23,10 +23,18 @@ const EnvSchema = z.object({
   BAI_MARKETPLACE_LINK_SECRET: z.string().min(32).optional(),
   /** Shared link key with the CONARO operating system (it reads the aggregate summary). */
   BAI_BOS_LINK_SECRET: z.string().min(32).optional(),
+  /** Scheduled trigger key (Vercel sends it as "Authorization: Bearer …"). Letters and digits, 16+ characters. */
+  CRON_SECRET: z.string().regex(/^[A-Za-z0-9_-]{16,}$/, "use 16+ letters, digits, - or _").optional(),
+  /** Set by Vercel on its deployments. */
+  VERCEL: z.string().optional(),
+  VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
 });
 export type Env = z.infer<typeof EnvSchema>;
 
-export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
+export function loadEnv(input: Record<string, string | undefined> = process.env): Env {
+  // On Vercel, default the public address to the project's production domain.
+  const source = { ...input };
+  if (source.VERCEL && !source.BAI_PUBLIC_URL && source.VERCEL_PROJECT_PRODUCTION_URL) source.BAI_PUBLIC_URL = `https://${source.VERCEL_PROJECT_PRODUCTION_URL}`;
   const parsed = EnvSchema.safeParse(source);
   if (!parsed.success) {
     // Names only; values are never printed.
@@ -35,6 +43,9 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   const env = parsed.data;
   if (env.BAI_MARKETPLACE_LINK_SECRET && env.BAI_MARKETPLACE_LINK_SECRET === env.BAI_BOS_LINK_SECRET) {
     throw new Error("Configuration problem: the marketplace and BOS link keys must be different");
+  }
+  if (env.VERCEL && !env.DATABASE_URL) {
+    throw new Error("Configuration problem: DATABASE_URL is required on Vercel (the embedded database cannot keep data between requests)");
   }
   return env;
 }

@@ -23,6 +23,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Build the Vercel bundle
+        run: npm run build
       - name: Tests (embedded PostgreSQL)
         run: npm test
       - name: Create a non-superuser role, as on Supabase
