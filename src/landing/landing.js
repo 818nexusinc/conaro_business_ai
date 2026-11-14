@@ -162,4 +162,93 @@
     var initial = fromHash >= 0 ? fromHash : Math.max(0, tabs.findIndex(function (t) { return t.getAttribute("aria-selected") === "true"; }));
     select(initial, false);
   });
+  // ---------------------------------------------------------------- motion and the page's interactions
+  var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Header: transparent over the hero, solid once the page scrolls.
+  var header = document.querySelector("[data-header]");
+  function onScrollHeader() { if (header) header.classList.toggle("scrolled", window.scrollY > 40); }
+  onScrollHeader();
+
+  // Hero video: plays muted in a loop unless the visitor prefers less motion; the button pauses it (WCAG 2.2.2).
+  var video = document.querySelector("[data-hero-video]");
+  var toggle = document.querySelector("[data-video-toggle]");
+  function setToggle(playing) {
+    if (!toggle) return;
+    toggle.setAttribute("aria-label", toggle.getAttribute(playing ? "data-label-pause" : "data-label-play"));
+    toggle.querySelector("path").setAttribute("d", playing ? "M8 5v14M16 5v14" : "M8 5l11 7-11 7z");
+  }
+  if (video) {
+    if (still) { setToggle(false); }
+    else { var pv = video.play(); if (pv && pv.catch) pv.catch(function () { setToggle(false); }); setToggle(true); }
+    var hero = video.closest(".hero");
+    if (still && hero) hero.classList.add("still");
+    // One button stops all background motion: the video and the moving list of trades.
+    if (toggle) toggle.addEventListener("click", function () {
+      if (video.paused) { video.play(); setToggle(true); if (hero) hero.classList.remove("still"); }
+      else { video.pause(); setToggle(false); if (hero) hero.classList.add("still"); }
+    });
+  }
+
+  // Reveal sections as they come into view.
+  var reveal = document.querySelectorAll("[data-reveal]");
+  if (!still && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0.08 });
+    reveal.forEach(function (el) { io.observe(el); });
+  } else reveal.forEach(function (el) { el.classList.add("in"); });
+
+  // Timeline progress line and gentle photo parallax, one frame at a time.
+  var timeline = document.querySelector("[data-timeline]");
+  var progress = document.querySelector("[data-progress]");
+  var parallax = document.querySelectorAll("[data-parallax] img");
+  var ticking = false;
+  function frame() {
+    ticking = false;
+    onScrollHeader();
+    if (still) return;
+    var vh = window.innerHeight;
+    if (timeline && progress) {
+      var r = timeline.getBoundingClientRect();
+      var p = Math.min(1, Math.max(0, (vh * 0.6 - r.top) / r.height));
+      progress.style.setProperty("--p", p.toFixed(3));
+    }
+    parallax.forEach(function (img) {
+      var b = img.parentElement.getBoundingClientRect();
+      if (b.bottom < 0 || b.top > vh) return;
+      var t = (b.top + b.height / 2 - vh / 2) / vh;           // -1 … 1 across the screen
+      img.style.setProperty("--py", (-6 - t * 6).toFixed(2) + "%");
+    });
+  }
+  window.addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(frame); } }, { passive: true });
+  frame();
+
+  // Plans: choosing one selects it in the form and slides the sign-up panel open under the plans.
+  var start = document.querySelector("[data-start]");
+  Array.prototype.forEach.call(document.querySelectorAll("[data-choose]"), function (a) {
+    a.addEventListener("click", function (e) {
+      if (!start) return;
+      e.preventDefault();
+      var id = a.getAttribute("data-choose");
+      var radio = start.querySelector('input[name="plan"][value="' + id + '"]');
+      if (radio) radio.checked = true;
+      Array.prototype.forEach.call(document.querySelectorAll("[data-plan-card]"), function (card) { card.classList.toggle("chosen", card.getAttribute("data-plan-card") === id); });
+      start.classList.add("open");
+      if (history.replaceState) history.replaceState(null, "", "#start");
+      setTimeout(function () {
+        start.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+        var first = start.querySelector('input[name="business"]');
+        if (first) first.focus({ preventScroll: true });
+      }, still ? 0 : 350);
+    });
+  });
+  // The radio buttons inside the form keep the cards in step.
+  if (start) start.addEventListener("change", function (e) {
+    if (e.target.name !== "plan") return;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-plan-card]"), function (card) { card.classList.toggle("chosen", card.getAttribute("data-plan-card") === e.target.value); });
+  });
+  if (start && location.hash === "#start") start.classList.add("open");
+  // Any link to #start (header, hero) opens the panel too.
+  Array.prototype.forEach.call(document.querySelectorAll('a[href$="#start"]:not([data-choose])'), function (a) { a.addEventListener("click", function () { if (start) start.classList.add("open"); }); });
 })();

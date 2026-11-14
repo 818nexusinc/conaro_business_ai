@@ -5,7 +5,9 @@ import type { Server } from "node:http";
 import type { Db } from "../src/shared/db.ts";
 import { freshDb, bai, SECRET } from "./fixtures.ts";
 import { createPortalServer } from "../src/portal/server.ts";
-import { AGENT_COPY, CONTROL_SCRIPT } from "../src/landing/agents-copy.ts";
+import { AGENT_COPY } from "../src/landing/agents-copy.ts";
+import { existsSync } from "node:fs";
+import { AGENT_PHOTO, CREDITS, DAY_PHOTOS, HERO_VIDEO, TRADE_PHOTO } from "../src/landing/media.ts";
 import { COPY, INDUSTRY_FR, PLAN_FEATURES_FR, PLAN_NAME_FR } from "../src/landing/copy.ts";
 import { AGENTS } from "../src/catalog/agents.ts";
 import { INDUSTRY_PACKS } from "../src/catalog/industries.ts";
@@ -41,14 +43,14 @@ describe("explainer content", () => {
       for (const l of [...a.script.fr, ...a.how.fr, a.summary.fr]) expect(l, a.id).not.toMatch(/\bdevis\b|\d+ ?%/i);
       for (const l of [...a.script.en, ...a.how.en]) expect(l, a.id).not.toMatch(/\d+ ?%|guarantee/i);
     }
-    expect(CONTROL_SCRIPT.fr.length).toBe(CONTROL_SCRIPT.en.length);
   });
 
   it("translates every industry, plan and plan feature", () => {
     for (const p of INDUSTRY_PACKS) expect(INDUSTRY_FR[p.id], p.id).toBeTruthy();
     for (const p of PLANS) { expect(PLAN_NAME_FR[p.id]).toBeTruthy(); expect(PLAN_FEATURES_FR[p.id]?.length).toBe(p.features.length); }
     expect(COPY.fr.faq.length).toBe(COPY.en.faq.length);
-    expect(COPY.fr.steps.length).toBe(COPY.en.steps.length);
+    expect(COPY.fr.day.length).toBe(COPY.en.day.length);
+    expect(COPY.fr.day.map((d) => d[4])).toEqual(COPY.en.day.map((d) => d[4]));
   });
 
   it("chooses the language from the link, then the remembered choice, then the browser", () => {
@@ -61,6 +63,21 @@ describe("explainer content", () => {
 
   it("the generated presenter scripts document is current (npm run gen:assets)", () => {
     expect(readFileSync(new URL("../docs/PRESENTER_SCRIPTS.md", import.meta.url), "utf8")).toBe(buildPresenterDoc());
+  });
+});
+
+describe("photos and video", () => {
+  it("every photo and video on the page exists, has text alternatives in both languages, and is credited", () => {
+    const photos = [...Object.values(AGENT_PHOTO), ...DAY_PHOTOS, ...Object.values(TRADE_PHOTO)];
+    for (const a of AGENT_COPY) expect(AGENT_PHOTO[a.id], a.id).toBeTruthy();
+    expect(DAY_PHOTOS.length).toBe(COPY.en.day.length);
+    for (const p of photos) {
+      for (const size of [640, 1280]) expect(existsSync(new URL(`../public/media/${p.file}-${size}.jpg`, import.meta.url)), p.file).toBe(true);
+      expect(p.alt.en.length).toBeGreaterThan(10); expect(p.alt.fr.length).toBeGreaterThan(10);
+      expect(CREDITS.some((c) => c.source.includes(".org/wiki/File:")), p.file).toBe(true);
+    }
+    for (const f of [HERO_VIDEO.mp4, HERO_VIDEO.webm, HERO_VIDEO.poster]) expect(existsSync(new URL(`../public/media/${f}`, import.meta.url)), f).toBe(true);
+    for (const c of CREDITS) { expect(c.author).toBeTruthy(); expect(c.license).toMatch(/^(CC BY|CC0|Public domain)/); expect(c.changes).toBeTruthy(); }
   });
 });
 
@@ -80,7 +97,7 @@ describe("landing page", () => {
       expect(body, a.id).toContain(`id="agent-${a.id}"`);
       expect(body, a.id).toContain(a.script.en[0]!.replaceAll("'", "&#39;"));
     }
-    expect(body.match(/data-play /g)?.length).toBe(AGENT_COPY.length + 2); // + hero + control
+    expect(body.match(/data-play /g)?.length).toBe(AGENT_COPY.length + 1); // + the hero's Business Manager
     for (const p of PLANS) expect(body).toContain(`plan=${p.id}#start`);
     expect(body).toMatch(/name="plan" value="premium" checked/);
     expect(body).not.toMatch(/\$\d|\d \$/);
@@ -97,7 +114,8 @@ describe("landing page", () => {
     expect(r.headers.get("content-language")).toBe("fr-CA");
     const body = await r.text();
     expect(body).toContain('<html lang="fr-CA">');
-    expect(body).toContain("Votre entreprise. Votre équipe IA.");
+    expect(body).toContain("Votre entreprise.");
+    expect(body).toContain("Votre équipe IA.");
     expect(body).toContain("Version française en cours de révision.");
     for (const a of AGENT_COPY) expect(body, a.id).toContain(a.name.fr.replaceAll("'", "&#39;"));
     expect(body).toContain("Prix annoncé avant le début de la facturation");

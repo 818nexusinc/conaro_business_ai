@@ -261,8 +261,3 @@ export const AGENT_COPY: AgentCopy[] = [
   },
 ];
 
-/** "You stay in control" explainer (not an agent). */
-export const CONTROL_SCRIPT: L = {
-  en: ["You decide how much the agents do on their own.", "Reports and drafts happen automatically.", "Quotes, bookings and reminders go out only under rules and limits you switch on.", "Prices, refunds and ad spend always wait for you, and one button pauses everything."],
-  fr: ["Vous décidez de ce que les agents font seuls.", "Les rapports et les brouillons se font automatiquement.", "Les soumissions, les réservations et les rappels partent seulement selon les règles et les limites que vous activez.", "Les prix, les remboursements et la publicité attendent toujours votre accord, et un seul bouton met tout en pause."],
-};

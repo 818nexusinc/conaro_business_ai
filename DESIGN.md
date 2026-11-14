@@ -52,8 +52,16 @@ On navy bands: text `#ffffff` (14:1), secondary `#c9d6e6` (9.5:1), accent `#f0a4
 - **Navigation (marketing):** logo left, at most four anchors, one primary CTA right; collapses to the CTA plus a menu on phones.
 - **Footer:** navy band, legal links, CONARO address placeholder, language switch.
 
+## Motion (landing page)
+
+- Hero: real-work background video (muted, looping, slow pan), entrance rise for the headline and the Business Manager card, a moving strip of trades. One pause button stops all background motion (WCAG 2.2.2).
+- Sections reveal as they enter the screen (fade and 32px rise, 0.8s, ease `cubic-bezier(.2,.7,.2,1)`); timeline photos unveil top to bottom and drift slightly (parallax); the timeline line fills as you scroll.
+- Plans: cards lift on hover; choosing one slides the sign-up panel open under them and focuses the first field.
+- Everything is progressive (`html.js`) and switched off for `prefers-reduced-motion`; nothing is hidden without JavaScript.
+
 ## Imagery and icons
 
 - Icons: one line set, 1.75px stroke, 24px grid, drawn as inline SVG in the brand colors (no icon font, no emoji).
-- Video presenters for the agents (see `docs/PRESENTER_SCRIPTS.md`); posters are frames from those videos.
+- Real photographs of local service work (openly licensed, credited in the footer, listed in `src/landing/media.ts`, files in `public/media` at 640 and 1280 px). They illustrate the work; they are never presented as CONARO customers. Replace them with the owner's own photos when available.
+- Each agent's presenter is a photo of the moment of work it handles, with a voice and live captions (see `docs/PRESENTER_SCRIPTS.md`).
 - Screenshots of the real control centre, cropped and framed, never mock dashboards with invented figures.

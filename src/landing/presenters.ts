@@ -1,18 +1,14 @@
 import type { Lang } from "../i18n.ts";
-import { AGENT_COPY, CONTROL_SCRIPT } from "./agents-copy.ts";
-import { COPY } from "./copy.ts";
+import { AGENT_COPY } from "./agents-copy.ts";
 
 /**
- * Every explainer on the landing page: one per operational agent plus "you stay in control", each in
+ * Every explainer on the landing page: one per operational agent, each in
  * English and French. Captions (/captions/<lang>/<key>.vtt) and docs/PRESENTER_SCRIPTS.md come from here.
  */
 export interface Explainer { key: string; name: string; lines: string[] }
 
 export function explainers(lang: Lang): Explainer[] {
-  return [
-    ...AGENT_COPY.map((a) => ({ key: a.id, name: a.name[lang], lines: a.script[lang] })),
-    { key: "control", name: COPY[lang].controlName, lines: CONTROL_SCRIPT[lang] },
-  ];
+  return AGENT_COPY.map((a) => ({ key: a.id, name: a.name[lang], lines: a.script[lang] }));
 }
 
 export function findExplainer(lang: Lang, key: string): Explainer | undefined {
