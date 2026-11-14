@@ -23,7 +23,7 @@ export interface PortalCtx {
   query: URLSearchParams;
   flash?: string | undefined;
   error?: string | undefined;
-  tenant: { name: string; industry: string; paused: boolean; paused_reason: string | null; time_zone: string };
+  tenant: { name: string; industry: string; paused: boolean; paused_reason: string | null; time_zone: string; is_demo: boolean };
 }
 
 const NAV: { href: string; label: string; perm?: Parameters<typeof can>[1] }[] = [
@@ -68,6 +68,7 @@ ${NAV.filter((n) => !n.perm || can(ctx.session.role, n.perm)).map((n) => html`<a
 <main id="main">
 <header class="top"><div class="muted">${ctx.session.name} · ${ctx.session.role}</div>
 <form method="post" action="/logout">${csrf(ctx)}<button class="secondary" type="submit">Sign out</button></form></header>
+${ctx.tenant.is_demo ? html`<div class="banner prod" role="status">DEMO WORKSPACE: every business, customer, booking, invoice and bank line here is invented for testing.</div>` : ""}
 <div class="banner sim" role="status">SIMULATION: no message, post, payment or purchase leaves CONARO Business AI yet. External actions are recorded and labelled simulated.</div>
 ${ctx.tenant.paused ? html`<div class="error" role="alert">All agents are paused${ctx.tenant.paused_reason ? html`: ${ctx.tenant.paused_reason}` : ""}.
 ${can(ctx.session.role, "resume") ? html`<form method="post" action="/do/resume">${csrf(ctx)}<button type="submit">Resume agents</button></form>` : ""}</div>`
@@ -415,6 +416,12 @@ export async function auditPage(ctx: PortalCtx): Promise<string> {
   const rows = await ctx.tdb.query<{ occurred_at: string; actor: string; action: string; subject_type: string; detail: unknown }>("select occurred_at, actor, action, subject_type, detail from bai_audit order by id desc limit 200");
   return layout(ctx, "Audit log", html`<p>${v.ok ? badge(`chain intact · ${v.checked} events`, "ok") : badge(`chain broken at ${v.brokenAt}`, "bad")}</p>
 ${table(["When", "Who", "What", "Subject", "Detail"], rows.map((r) => [html`${when(r.occurred_at)}`, html`${r.actor}`, html`${r.action}`, html`${r.subject_type}`, html`<details><summary>Show</summary>${jsonBlock(r.detail)}</details>`]))}`);
+}
+
+/** Demo logins, shown once on the set-up page. */
+export function credentialsTable(rows: { business: string; role: string; email: string; password: string }[]): Html {
+  // A stacked list (not a table) so emails and passwords are never cut off on a narrow page.
+  return html`<ul class="credentials">${rows.map((c) => html`<li><strong>${c.business}</strong> · ${c.role}<br>Email: <code class="email">${c.email}</code><br>Password: <code class="password">${c.password}</code></li>`)}</ul>`;
 }
 
 export const ALL_INDUSTRIES = INDUSTRY_PACKS.map((p) => ({ id: p.id, name: p.name }));

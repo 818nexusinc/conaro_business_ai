@@ -33,6 +33,7 @@ export async function createApp(): Promise<App> {
     ...(c.env.BAI_MARKETPLACE_LINK_SECRET ? { marketplaceLinkSecret: c.env.BAI_MARKETPLACE_LINK_SECRET } : {}),
     ...(c.env.BAI_BOS_LINK_SECRET ? { bosLinkSecret: c.env.BAI_BOS_LINK_SECRET } : {}),
     ...(c.env.CRON_SECRET ? { cron: { secret: c.env.CRON_SECRET, run: cycle } } : {}),
+    ...(c.env.BAI_SETUP_KEY ? { setupKey: c.env.BAI_SETUP_KEY } : {}),
   });
   return { handler, container: c, cycle };
 }

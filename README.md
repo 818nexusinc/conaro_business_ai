@@ -16,6 +16,7 @@ npm install
 npm run check                     # typecheck + tests on embedded PostgreSQL
 npm run demo -- --serve           # synthetic cleaning business, enquiry → quote → booking → job → invoice
                                   # then http://localhost:8790  (owner@demo.example.test / demo-password-123)
+npm run seed:demo                 # three demo businesses with logins for every role (printed once)
 ```
 
 Run it for real (simulation mode):

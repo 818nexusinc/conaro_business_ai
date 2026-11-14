@@ -38,7 +38,12 @@ Vercel's limits ([R60](REFERENCE_CHECKS.md)): **Hobby** allows cron jobs **once 
    | `MARKETPLACE_BASE_URL`, `BAI_MARKETPLACE_LINK_SECRET`, `BAI_BOS_LINK_SECRET` | optional; the links in [INTEROP.md](INTEROP.md). The two keys must differ. |
 
 3. **Deploy.** Push to `main`, or select **Redeploy** in Vercel. The build runs `npm run build`.
-4. **Create the first workspace.** From a computer with the repository: `DATABASE_URL=… BAI_UNSUBSCRIBE_SECRET=… BAI_OWNER_PASSWORD='…' npm run tenant -- --name "…" --slug … --industry … --plan … --email … --owner "…"`.
+4. **Demo accounts and the first workspace.** Add `BAI_SETUP_KEY` (32+ random characters), redeploy, and open `/setup`:
+   - **Create demo accounts** builds three invented businesses (cleaning on Premium, snow and lawn on Professional, plumbing on Starter). Each gets logins for owner, manager, staff, accountant and viewer, two months of history, enquiries and agent activity. The logins are shown **once**. Running it again gives new passwords without duplicating data, and **Remove demo accounts** closes them.
+   - **First real business** creates a real workspace and its owner.
+   - Remove `BAI_SETUP_KEY` when you are done.
+
+   Demo workspaces show a DEMO banner and are left out of the summary the operating system reads. From a computer instead: `DATABASE_URL=… BAI_UNSUBSCRIBE_SECRET=… npm run seed:demo`. Or, to create the first workspace from a computer: From a computer with the repository: `DATABASE_URL=… BAI_UNSUBSCRIBE_SECRET=… BAI_OWNER_PASSWORD='…' npm run tenant -- --name "…" --slug … --industry … --plan … --email … --owner "…"`.
 5. **Sign in** at the production address and finish onboarding in Business settings.
 6. **Check the deployment:**
    - `GET /healthz` answers `{"ok":true}`.

@@ -12,5 +12,9 @@ export const MIGRATIONS: readonly { name: string; sql: string }[] = [
  {
   "name": "0003_cycle_lock.sql",
   "sql": "-- One agents' cycle at a time across all instances (a scheduled call can overlap a slow previous run,\n-- or be delivered twice). A lease that expires on its own if an instance dies mid-cycle. System-only.\ncreate table bai_cycle_lock (\n  id integer primary key check (id = 1),\n  holder text,\n  locked_until timestamptz not null default '-infinity'\n);\ninsert into bai_cycle_lock (id) values (1);\nalter table bai_cycle_lock enable row level security;\n"
+ },
+ {
+  "name": "0004_demo_flag.sql",
+  "sql": "-- Demo workspaces: synthetic data for testing and demonstrations. Shown with a DEMO banner in the\n-- control centre and left out of the summary the CONARO operating system reads.\nalter table bai_tenants add column is_demo boolean not null default false;\n"
  }
 ];

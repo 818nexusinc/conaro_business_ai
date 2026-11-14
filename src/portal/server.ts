@@ -23,6 +23,29 @@ import { buildSummary } from "../interop/bos.ts";
 import { verifySsoToken } from "../interop/sso.ts";
 import { can, createSession, csrfOk, portalLogin, portalLogout, portalSession, SESSION_HOURS, type Permission, type PortalSession } from "./auth.ts";
 import * as P from "./pages.ts";
+import { html, type Html } from "../shared/html.ts";
+import { seedDemo, removeDemo } from "../demo.ts";
+import { createTenant } from "../tenants.ts";
+import { INDUSTRY_PACKS } from "../catalog/industries.ts";
+import { PLANS } from "../catalog/plans.ts";
+
+function setupPage(enabled: boolean, result?: Html): string {
+  if (!enabled) return P.publicPage("Set-up is off", "This page only works while the BAI_SETUP_KEY setting is present. Add it in the host's environment variables (32+ random characters), redeploy, and come back. Remove it again when you are done.");
+  const key = html`<label>Set-up key (the BAI_SETUP_KEY value) <input name="key" type="password" required autocomplete="off"></label>`;
+  return P.publicPage("CONARO Business AI set-up", "Create demo accounts for testing, or the first real business. Remove BAI_SETUP_KEY from the host when you are done.", html`
+${result ?? ""}
+<h2>Demo accounts</h2><p class="muted">Three invented businesses (cleaning on Premium, snow and lawn on Professional, plumbing on Starter) with logins for owner, manager, staff, accountant and viewer, history, enquiries and agent activity. Running it again gives new passwords and never duplicates data.</p>
+<form class="stack" method="post">${key}<button name="action" value="demo" type="submit">Create demo accounts (or new passwords)</button></form>
+<form class="stack" method="post">${key}<button class="secondary" name="action" value="remove-demo" type="submit">Remove demo accounts</button></form>
+<h2>First real business</h2>
+<form class="stack" method="post">${key}
+<label>Business name <input name="name" required maxlength="120"></label><label>Short name for addresses (lower-case letters, digits, dashes) <input name="slug" required pattern="[a-z0-9][a-z0-9-]{1,62}"></label>
+<label>Industry <select name="industry">${INDUSTRY_PACKS.map((p) => html`<option value="${p.id}">${p.name}</option>`)}</select></label>
+<label>Plan <select name="plan">${PLANS.map((p) => html`<option value="${p.id}">${p.name}</option>`)}</select></label>
+<label>Owner's name <input name="owner" required maxlength="120"></label><label>Owner's email <input name="email" type="email" required></label>
+<label>Owner's password (12+ characters) <input name="password" type="password" minlength="12" required autocomplete="new-password"></label>
+<button name="action" value="business" type="submit">Create business</button></form>`);
+}
 
 import { CSS } from "../generated/assets.ts";
 const COOKIE = "bai_session";
@@ -42,6 +65,8 @@ export interface PortalOptions {
   bosLinkSecret?: string;
   /** Scheduled trigger (e.g. Vercel Cron): GET /api/cron/tick with "Authorization: Bearer <secret>" runs one cycle. */
   cron?: { secret: string; run: () => Promise<unknown> };
+  /** One-time set-up page (/setup), open only while BAI_SETUP_KEY is set. */
+  setupKey?: string;
 }
 
 function headers(res: ServerResponse, secure: boolean) {
@@ -275,6 +300,40 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
       if (origin === "null") return send(res, 403, "Opaque-origin form posts are refused.", "text/plain");
     }
 
+    if (path === "/setup") {
+      if (method === "GET") return send(res, 200, setupPage(Boolean(opts.setupKey)));
+      if (method !== "POST") return send(res, 405, "Method not allowed", "text/plain");
+      const f = await readForm(req);
+      if (!opts.setupKey) return send(res, 403, setupPage(false));
+      const recent = await db.query<{ n: number }>("select count(*)::int n from bai_login_attempts where email = '[setup]' and not success and attempted_at > now() - interval '15 minutes'");
+      if ((recent[0]?.n ?? 0) >= 5) return send(res, 429, setupPage(true, html`<div class="error" role="alert">Too many wrong keys. Try again in 15 minutes.</div>`));
+      const given = Buffer.from(f.get("key") ?? ""); const expected = Buffer.from(opts.setupKey);
+      const ok = given.length === expected.length && timingSafeEqual(given, expected);
+      await db.query("insert into bai_login_attempts (email, ip, success) values ('[setup]', $1, $2)", [ip(req), ok]);
+      if (!ok) return send(res, 401, setupPage(true, html`<div class="error" role="alert">That set-up key is not right.</div>`));
+      try {
+        const action = f.get("action");
+        if (action === "demo") {
+          const r = await seedDemo(db, deps);
+          return send(res, 200, setupPage(true, html`<div class="flash" role="status">${r.created.length ? `Created ${r.created.length} demo businesses.` : ""} ${r.reset.length ? `New passwords for ${r.reset.length} existing demo businesses (the old ones no longer work).` : ""} Copy these now: they are shown only once.</div>
+${P.credentialsTable(r.credentials)}`));
+        }
+        if (action === "remove-demo") {
+          const n = await removeDemo(db);
+          return send(res, 200, setupPage(true, html`<div class="flash" role="status">${n ? `Closed ${n} demo businesses and disabled their logins. Their records are kept.` : "No open demo businesses."}</div>`));
+        }
+        if (action === "business") {
+          const r = await createTenant(db, { name: f.get("name") ?? "", slug: f.get("slug") ?? "", industry: f.get("industry") ?? "", plan: f.get("plan") ?? "",
+            owner: { email: f.get("email") ?? "", name: f.get("owner") ?? "", password: f.get("password") ?? "" } }, "system:setup");
+          return send(res, 200, setupPage(true, html`<div class="flash" role="status">Created ${f.get("name") ?? ""}. Sign in at <a href="/login">/login</a> with the owner's email and the password you chose (workspace ${r.tenantId.slice(0, 8)}…).</div>`));
+        }
+        return send(res, 400, setupPage(true, html`<div class="error" role="alert">Unknown action.</div>`));
+      } catch (err) {
+        if (err instanceof PermanentError || err instanceof ZodError) return send(res, 400, setupPage(true, html`<div class="error" role="alert">${message(err)}</div>`));
+        throw err;
+      }
+    }
+
     if (path === "/login") {
       if (method === "GET") return send(res, 200, P.loginPage());
       if (method === "POST") {
@@ -323,7 +382,7 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
     const perm = PAGE_PERMS[path];
     if (perm && !can(session.role, perm)) return send(res, 403, "Not allowed for your role.", "text/plain");
     const body = await withTenant(db, session.tenantId, async (tdb) => {
-      const tenant = (await tdb.query<P.PortalCtx["tenant"]>("select name, industry, paused, paused_reason, time_zone from bai_tenants"))[0]!;
+      const tenant = (await tdb.query<P.PortalCtx["tenant"]>("select name, industry, paused, paused_reason, time_zone, is_demo from bai_tenants"))[0]!;
       return page({ session, tdb, deps, path, query: url.searchParams, flash: url.searchParams.get("ok")?.slice(0, 300), error: url.searchParams.get("err")?.slice(0, 300), tenant });
     });
     return send(res, 200, body);

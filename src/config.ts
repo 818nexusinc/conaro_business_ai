@@ -25,6 +25,8 @@ const EnvSchema = z.object({
   BAI_BOS_LINK_SECRET: z.string().min(32).optional(),
   /** Scheduled trigger key (Vercel sends it as "Authorization: Bearer …"). Letters and digits, 16+ characters. */
   CRON_SECRET: z.string().regex(/^[A-Za-z0-9_-]{16,}$/, "use 16+ letters, digits, - or _").optional(),
+  /** Opens the one-time /setup page (demo accounts, first business) while set. 32+ characters. */
+  BAI_SETUP_KEY: z.string().min(32).optional(),
   /** Set by Vercel on its deployments. */
   VERCEL: z.string().optional(),
   VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
