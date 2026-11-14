@@ -10,6 +10,8 @@ import { PLAN_BY_ID } from "../catalog/plans.ts";
 
 export const MARKETING_CONSENT_WORDING =
   "Yes, CONARO may email me product news and offers about CONARO Business AI. I can unsubscribe at any time.";
+export const MARKETING_CONSENT_WORDING_FR =
+  "Oui, CONARO peut m'envoyer par courriel des nouvelles et des offres sur CONARO Business AI. Je peux me désabonner en tout temps.";
 const MAX_PER_IP_PER_HOUR = 5;
 
 export const SignupSchema = z.object({
@@ -21,6 +23,7 @@ export const SignupSchema = z.object({
   plan: z.string().refine((p) => PLAN_BY_ID.has(p as never), "choose a plan"),
   pilot: z.literal("yes", { message: "please confirm you understand the pilot" }),
   marketing: z.literal("yes").optional(),
+  lang: z.enum(["en", "fr"]).default("en"),
 });
 
 function slugFor(business: string): string {
@@ -49,6 +52,6 @@ export async function signUp(db: Db, form: Record<string, string | undefined>, i
   await db.query(
     `insert into bai_signups (tenant_id, business_name, owner_email, plan, industry, marketing_consent, consent_wording, ip_hash)
      values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [tenantId, s.business, s.email, s.plan, s.industry, s.marketing === "yes", s.marketing === "yes" ? MARKETING_CONSENT_WORDING : null, ipHash]);
+    [tenantId, s.business, s.email, s.plan, s.industry, s.marketing === "yes", s.marketing === "yes" ? (s.lang === "fr" ? MARKETING_CONSENT_WORDING_FR : MARKETING_CONSENT_WORDING) : null, ipHash]);
   return { tenantId, userId: ownerId };
 }

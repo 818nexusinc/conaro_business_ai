@@ -47,9 +47,10 @@ ${result ?? ""}
 <button name="action" value="business" type="submit">Create business</button></form>`);
 }
 
-import { CSS, LANDING_CSS, MANROPE_WOFF2_BASE64 } from "../generated/assets.ts";
+import { CSS, LANDING_CSS, LANDING_JS, MANROPE_WOFF2_BASE64 } from "../generated/assets.ts";
 import { landingPage } from "../landing/page.ts";
-import { PRESENTERS, captionsVtt } from "../landing/presenters.ts";
+import { captionsVtt, findExplainer } from "../landing/presenters.ts";
+import { langCookie, resolveLang, type Lang } from "../i18n.ts";
 import { signUp } from "../landing/signup.ts";
 
 const MANROPE = Buffer.from(MANROPE_WOFF2_BASE64, "base64");
@@ -73,7 +74,7 @@ export interface PortalOptions {
   /** One-time set-up page (/setup), open only while BAI_SETUP_KEY is set. */
   setupKey?: string;
   /** The public landing page at / (signed-out visitors) and self-serve pilot sign-up. */
-  landing?: { signupOpen: boolean; videoBase?: string };
+  landing?: { signupOpen: boolean; videoBase?: string; audioBase?: string; frReviewedBy?: string };
 }
 
 function headers(res: ServerResponse, secure: boolean) {
@@ -130,11 +131,20 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
   const deps = app.deps;
 
   /** The landing page, with its own content security policy (the video host is allowed for media and posters only). */
-  const videoOrigin = opts.landing?.videoBase ? new URL(opts.landing.videoBase).origin : "";
-  const LANDING_CSP = `default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'${videoOrigin ? ` ${videoOrigin}` : ""}; media-src 'self'${videoOrigin ? ` ${videoOrigin}` : ""}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
-  const sendLanding = (res: ServerResponse, status: number, values: Record<string, string>, error?: string, plan?: string) => {
+  const mediaOrigins = [opts.landing?.videoBase, opts.landing?.audioBase].filter((u): u is string => Boolean(u)).map((u) => new URL(u).origin);
+  const media = [...new Set(mediaOrigins)].map((o) => ` ${o}`).join("");
+  const LANDING_CSP = `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'${media}; media-src 'self'${media}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
+  const pageLang = (req: IncomingMessage, url: URL, res: ServerResponse): Lang => {
+    const r = resolveLang(url.searchParams.get("lang"), cookie(req, "bai_lang"), req.headers["accept-language"]);
+    if (r.remember) res.setHeader("Set-Cookie", langCookie(r.lang, secure));
+    return r.lang;
+  };
+  const sendLanding = (res: ServerResponse, lang: Lang, status: number, values: Record<string, string>, error?: string, plan?: string) => {
     res.setHeader("Content-Security-Policy", LANDING_CSP);
-    return send(res, status, landingPage({ signupOpen: Boolean(opts.landing?.signupOpen), videoBase: opts.landing?.videoBase, values, error, plan }));
+    res.setHeader("Content-Language", lang === "fr" ? "fr-CA" : "en-CA");
+    res.setHeader("Vary", "Cookie, Accept-Language");
+    return send(res, status, landingPage({ lang, signupOpen: Boolean(opts.landing?.signupOpen), videoBase: opts.landing?.videoBase, audioBase: opts.landing?.audioBase,
+      frReviewedBy: opts.landing?.frReviewedBy, values, error, plan }));
   };
 
   const ACTIONS: Record<string, Action> = {
@@ -253,13 +263,15 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
     const method = req.method ?? "GET";
     if (path === "/static/landing.css" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=3600"); return send(res, 200, LANDING_CSS, "text/css; charset=utf-8"); }
     if (path === "/static/manrope.woff2" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=604800, immutable"); res.statusCode = 200; res.setHeader("Content-Type", "font/woff2"); return res.end(MANROPE); }
-    const caption = path.match(/^\/captions\/([a-z-]{2,40})\.vtt$/);
+    if (path === "/static/landing.js" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=3600"); return send(res, 200, LANDING_JS, "text/javascript; charset=utf-8"); }
+    const caption = path.match(/^\/captions\/(en|fr)\/([a-z-]{2,40})\.vtt$/);
     if (caption && method === "GET") {
-      const p = PRESENTERS.find((x) => x.id === caption[1]);
-      if (!p) return send(res, 404, "Not found", "text/plain");
+      const e = findExplainer(caption[1] as Lang, caption[2]!);
+      if (!e) return send(res, 404, "Not found", "text/plain");
       res.setHeader("Cache-Control", "public, max-age=3600");
-      return send(res, 200, captionsVtt(p), "text/vtt; charset=utf-8");
+      return send(res, 200, captionsVtt(caption[1] as Lang, e.lines), "text/vtt; charset=utf-8");
     }
+    if (path.startsWith("/captions/")) return send(res, 404, "Not found", "text/plain");
     if (path === "/static/app.css" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=3600"); return send(res, 200, CSS, "text/css; charset=utf-8"); }
     if (path === "/healthz") return send(res, 200, JSON.stringify({ ok: true }), "application/json");
 
@@ -359,8 +371,9 @@ ${P.credentialsTable(r.credentials)}`));
     }
 
     if (path === "/signup" && method === "POST") {
-      if (!opts.landing?.signupOpen) return sendLanding(res, 403, {}, "Sign-ups are paused at the moment.");
       const f = await readForm(req);
+      const lang: Lang = f.get("lang") === "fr" ? "fr" : url.searchParams.get("lang") === "fr" ? "fr" : "en";
+      if (!opts.landing?.signupOpen) return sendLanding(res, lang, 403, {}, "Sign-ups are paused at the moment.");
       const form = Object.fromEntries([...f.entries()].filter(([k]) => k !== "password")) as Record<string, string>;
       try {
         const r = await signUp(db, Object.fromEntries(f.entries()), ip(req));
@@ -368,7 +381,8 @@ ${P.credentialsTable(r.credentials)}`));
         res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
         return redirect(res, `/settings?ok=${encodeURIComponent("Welcome! Your pilot workspace is ready. Start with your services, prices and hours below.")}#main`);
       } catch (err) {
-        if (err instanceof PermanentError || err instanceof ZodError) return sendLanding(res, 400, form, message(err));
+        if (err instanceof ZodError) return sendLanding(res, lang, 400, form, [...new Set(err.issues.map((i) => i.message))].join(" | "));
+        if (err instanceof PermanentError) return sendLanding(res, lang, 400, form, err.message);
         throw err;
       }
     }
@@ -387,7 +401,7 @@ ${P.credentialsTable(r.credentials)}`));
     const token = cookie(req, COOKIE);
     const session = await portalSession(db, token);
     // Signed-out visitors to the home page see the landing page; signed-in owners get their control centre.
-    if (!session && path === "/" && (method === "GET" || method === "HEAD") && opts.landing) return sendLanding(res, 200, {}, undefined, url.searchParams.get("plan") ?? undefined);
+    if (!session && path === "/" && (method === "GET" || method === "HEAD") && opts.landing) return sendLanding(res, pageLang(req, url, res), 200, {}, undefined, url.searchParams.get("plan") ?? undefined);
     if (!session) return method === "GET" ? redirect(res, "/login") : send(res, 401, "Sign in again.", "text/plain");
 
     if (method === "POST") {

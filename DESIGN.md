@@ -46,7 +46,9 @@ On navy bands: text `#ffffff` (14:1), secondary `#c9d6e6` (9.5:1), accent `#f0a4
 - **Links:** `--info` in the app; on marketing pages, underlined text in the text color.
 - **Inputs:** 44px height on marketing forms, visible label above, error text in `--bad` below the field.
 - **Cards:** surface, 1px line, 12px radius, 24px padding; a plan card that is recommended gets a 2px copper border and a "Most chosen" label only if that is true.
-- **Video presenter:** 16:9 frame, 20px radius, poster image, native controls, captions track on by default, transcript in a `details` element below. Without a video file it shows the presenter card: name, role and the script as captions (no fake video controls).
+- **Agent tabs:** one tab per operational agent, grouped by department (group labels are visual only). Desktop and tablet: a sticky vertical list (260px) beside the panel; phones: a horizontal strip that keeps the selected tab in view. Selected tab: surface fill, 3px copper left border (copper outline on phones). Arrow keys, Home and End move between tabs; without JavaScript every panel is shown and the tabs are anchor links.
+- **Video presenter:** 16:9 frame, 20px radius, poster image, native controls, captions track on by default, transcript in a `details` element below. Without a video file it shows the presenter card with a "Play explainer" button: recorded narration if configured, otherwise the device's most natural voice for the page's language, with the current line as a caption and highlighted in the transcript; captions advance alone when no voice exists. The voice used is named under the button. No fake video controls.
+- **Language switch:** globe icon plus the other language's name ("Français" / "English") in the header and footer; the choice is remembered.
 - **Navigation (marketing):** logo left, at most four anchors, one primary CTA right; collapses to the CTA plus a menu on phones.
 - **Footer:** navy band, legal links, CONARO address placeholder, language switch.
 

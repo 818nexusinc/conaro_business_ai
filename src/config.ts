@@ -31,6 +31,10 @@ const EnvSchema = z.object({
   BAI_SIGNUP: z.enum(["open", "closed"]).default("open"),
   /** Where the presenter videos live (<id>.mp4 and <id>.jpg). Without it, illustrated presenter cards with captions are shown. */
   BAI_PRESENTER_VIDEO_BASE: z.string().url().optional(),
+  /** Recorded narration (natural human voices): <base>/<lang>/<agent>.mp3. Without it, the visitor's device reads the script. */
+  BAI_PRESENTER_AUDIO_BASE: z.string().url().optional(),
+  /** Name of the fluent reviewer who approved the French copy. Until set, French pages say the translation is under review. */
+  BAI_FR_REVIEWED_BY: z.string().min(2).max(120).optional(),
   /** Set by Vercel on its deployments. */
   VERCEL: z.string().optional(),
   VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),

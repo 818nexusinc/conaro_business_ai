@@ -37,7 +37,9 @@ Vercel's limits ([R60](REFERENCE_CHECKS.md)): **Hobby** allows cron jobs **once 
    | `ANTHROPIC_API_KEY` | optional; without it replies use approved facts only and the chat shows the records |
    | `MARKETPLACE_BASE_URL`, `BAI_MARKETPLACE_LINK_SECRET`, `BAI_BOS_LINK_SECRET` | optional; the links in [INTEROP.md](INTEROP.md). The two keys must differ. |
    | `BAI_SIGNUP` | optional; `open` (default) lets businesses create a pilot workspace from the landing page, `closed` pauses sign-ups |
-   | `BAI_PRESENTER_VIDEO_BASE` | optional; the folder with the presenter videos ([PRESENTER_SCRIPTS.md](PRESENTER_SCRIPTS.md)). Without it the landing page shows illustrated presenters with captions |
+   | `BAI_PRESENTER_VIDEO_BASE` | optional; folder with the explainer videos, `<lang>/<key>.mp4` + `.jpg` ([PRESENTER_SCRIPTS.md](PRESENTER_SCRIPTS.md)) |
+   | `BAI_PRESENTER_AUDIO_BASE` | optional; folder with recorded natural-voice narration, `<lang>/<key>.mp3`. Without video or narration the visitor's device reads each script with its most natural voice, with captions |
+   | `BAI_FR_REVIEWED_BY` | optional; name of the fluent reader who reviewed the French page. Until set, the French page shows "Version française en cours de révision." |
 
 3. **Deploy.** Push to `main`, or select **Redeploy** in Vercel. The build runs `npm run build`.
 4. **Demo accounts and the first workspace.** Add `BAI_SETUP_KEY` (32+ random characters), redeploy, and open `/setup`:
