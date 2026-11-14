@@ -34,6 +34,7 @@ export async function createApp(): Promise<App> {
     ...(c.env.BAI_BOS_LINK_SECRET ? { bosLinkSecret: c.env.BAI_BOS_LINK_SECRET } : {}),
     ...(c.env.CRON_SECRET ? { cron: { secret: c.env.CRON_SECRET, run: cycle } } : {}),
     ...(c.env.BAI_SETUP_KEY ? { setupKey: c.env.BAI_SETUP_KEY } : {}),
+    landing: { signupOpen: c.env.BAI_SIGNUP === "open", ...(c.env.BAI_PRESENTER_VIDEO_BASE ? { videoBase: c.env.BAI_PRESENTER_VIDEO_BASE } : {}) },
   });
   return { handler, container: c, cycle };
 }

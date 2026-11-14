@@ -27,6 +27,10 @@ const EnvSchema = z.object({
   CRON_SECRET: z.string().regex(/^[A-Za-z0-9_-]{16,}$/, "use 16+ letters, digits, - or _").optional(),
   /** Opens the one-time /setup page (demo accounts, first business) while set. 32+ characters. */
   BAI_SETUP_KEY: z.string().min(32).optional(),
+  /** Self-serve pilot sign-up on the landing page: "open" (default) or "closed". */
+  BAI_SIGNUP: z.enum(["open", "closed"]).default("open"),
+  /** Where the presenter videos live (<id>.mp4 and <id>.jpg). Without it, illustrated presenter cards with captions are shown. */
+  BAI_PRESENTER_VIDEO_BASE: z.string().url().optional(),
   /** Set by Vercel on its deployments. */
   VERCEL: z.string().optional(),
   VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),

@@ -47,7 +47,12 @@ ${result ?? ""}
 <button name="action" value="business" type="submit">Create business</button></form>`);
 }
 
-import { CSS } from "../generated/assets.ts";
+import { CSS, LANDING_CSS, MANROPE_WOFF2_BASE64 } from "../generated/assets.ts";
+import { landingPage } from "../landing/page.ts";
+import { PRESENTERS, captionsVtt } from "../landing/presenters.ts";
+import { signUp } from "../landing/signup.ts";
+
+const MANROPE = Buffer.from(MANROPE_WOFF2_BASE64, "base64");
 const COOKIE = "bai_session";
 const MAX_BODY = 2_200_000;
 
@@ -67,6 +72,8 @@ export interface PortalOptions {
   cron?: { secret: string; run: () => Promise<unknown> };
   /** One-time set-up page (/setup), open only while BAI_SETUP_KEY is set. */
   setupKey?: string;
+  /** The public landing page at / (signed-out visitors) and self-serve pilot sign-up. */
+  landing?: { signupOpen: boolean; videoBase?: string };
 }
 
 function headers(res: ServerResponse, secure: boolean) {
@@ -121,6 +128,14 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
   const secure = opts.secure ?? false;
   const ip = (req: IncomingMessage) => (opts.trustProxy ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "") || req.socket.remoteAddress || "unknown";
   const deps = app.deps;
+
+  /** The landing page, with its own content security policy (the video host is allowed for media and posters only). */
+  const videoOrigin = opts.landing?.videoBase ? new URL(opts.landing.videoBase).origin : "";
+  const LANDING_CSP = `default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'${videoOrigin ? ` ${videoOrigin}` : ""}; media-src 'self'${videoOrigin ? ` ${videoOrigin}` : ""}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
+  const sendLanding = (res: ServerResponse, status: number, values: Record<string, string>, error?: string, plan?: string) => {
+    res.setHeader("Content-Security-Policy", LANDING_CSP);
+    return send(res, status, landingPage({ signupOpen: Boolean(opts.landing?.signupOpen), videoBase: opts.landing?.videoBase, values, error, plan }));
+  };
 
   const ACTIONS: Record<string, Action> = {
     "/do/pause": { perm: "pause", back: "/", run: async (f, s, t) => { await setPaused(t, true, f.get("reason")?.slice(0, 200) || "paused", `user:${s.userId}`); return "All agents are paused."; } },
@@ -236,6 +251,15 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
     const url = new URL(req.url ?? "/", "http://portal.local");
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = req.method ?? "GET";
+    if (path === "/static/landing.css" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=3600"); return send(res, 200, LANDING_CSS, "text/css; charset=utf-8"); }
+    if (path === "/static/manrope.woff2" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=604800, immutable"); res.statusCode = 200; res.setHeader("Content-Type", "font/woff2"); return res.end(MANROPE); }
+    const caption = path.match(/^\/captions\/([a-z-]{2,40})\.vtt$/);
+    if (caption && method === "GET") {
+      const p = PRESENTERS.find((x) => x.id === caption[1]);
+      if (!p) return send(res, 404, "Not found", "text/plain");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return send(res, 200, captionsVtt(p), "text/vtt; charset=utf-8");
+    }
     if (path === "/static/app.css" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=3600"); return send(res, 200, CSS, "text/css; charset=utf-8"); }
     if (path === "/healthz") return send(res, 200, JSON.stringify({ ok: true }), "application/json");
 
@@ -334,6 +358,21 @@ ${P.credentialsTable(r.credentials)}`));
       }
     }
 
+    if (path === "/signup" && method === "POST") {
+      if (!opts.landing?.signupOpen) return sendLanding(res, 403, {}, "Sign-ups are paused at the moment.");
+      const f = await readForm(req);
+      const form = Object.fromEntries([...f.entries()].filter(([k]) => k !== "password")) as Record<string, string>;
+      try {
+        const r = await signUp(db, Object.fromEntries(f.entries()), ip(req));
+        const token = await createSession(db, r.userId, r.tenantId, { ip: ip(req), via: "password" });
+        res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure ? "; Secure" : ""}`);
+        return redirect(res, `/settings?ok=${encodeURIComponent("Welcome! Your pilot workspace is ready. Start with your services, prices and hours below.")}#main`);
+      } catch (err) {
+        if (err instanceof PermanentError || err instanceof ZodError) return sendLanding(res, 400, form, message(err));
+        throw err;
+      }
+    }
+
     if (path === "/login") {
       if (method === "GET") return send(res, 200, P.loginPage());
       if (method === "POST") {
@@ -347,6 +386,8 @@ ${P.credentialsTable(r.credentials)}`));
 
     const token = cookie(req, COOKIE);
     const session = await portalSession(db, token);
+    // Signed-out visitors to the home page see the landing page; signed-in owners get their control centre.
+    if (!session && path === "/" && (method === "GET" || method === "HEAD") && opts.landing) return sendLanding(res, 200, {}, undefined, url.searchParams.get("plan") ?? undefined);
     if (!session) return method === "GET" ? redirect(res, "/login") : send(res, 401, "Sign in again.", "text/plain");
 
     if (method === "POST") {

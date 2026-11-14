@@ -36,6 +36,8 @@ On Vercel: see [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md).
 |---|---|
 | [docs/PLAN.md](docs/PLAN.md) | Audit, architecture, tenant isolation, agents, autonomy, workflows, industry packs, subscriptions, costs, phase status |
 | [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md) | Deploying on Vercel: database, environment variables, the daily cron and plan limits, checks |
+| [docs/PRESENTER_SCRIPTS.md](docs/PRESENTER_SCRIPTS.md) | The landing page's seven presenter video scripts, with recording and publishing notes |
+| [DESIGN.md](DESIGN.md) | Colors, type, spacing and components |
 | [docs/INTEROP.md](docs/INTEROP.md) | How it works with the marketplace and the operating system: protocol, provider feed contract, sign-in hand-over, BOS summary, shared database |
 | [docs/REFERENCE_CHECKS.md](docs/REFERENCE_CHECKS.md) | Official sources relied on (CRA GST/HST) and how they were checked |
 | [CLAUDE.md](CLAUDE.md) | Working agreement for changes to this repository |
