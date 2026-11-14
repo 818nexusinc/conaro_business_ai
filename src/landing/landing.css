@@ -88,22 +88,23 @@ header.site { position: sticky; top: 0; z-index: 10; background: var(--surface);
 @media (prefers-color-scheme: dark) { .review-note { background: #352a12; color: #f3c56a; } }
 
 /* ---------------------------------------------------------------- Hero: real work on video, headline, the Business Manager */
-.hero { position: relative; min-height: min(100svh, 920px); display: grid; align-content: center; color: #fff; overflow: hidden; background: #0b121b; padding: 128px 0 140px; isolation: isolate; }
+.hero { position: relative; min-height: 95vh; min-height: 95svh; display: grid; align-content: center; color: #fff; overflow: hidden; background: #0b121b; padding: 128px 0 140px; isolation: isolate; }
 .hero-media { position: absolute; inset: 0; z-index: -1; }
 .hero-video { width: 100%; height: 100%; object-fit: cover; transform: scale(1.06); }
 .js .hero-video { animation: drift 30s ease-in-out infinite alternate; }
 @keyframes drift { to { transform: scale(1.14) translate(-1.5%, -1%); } }
-.hero-media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, rgb(11 18 27 / .92) 0%, rgb(11 18 27 / .72) 45%, rgb(11 18 27 / .35) 100%), linear-gradient(0deg, rgb(11 18 27 / .85), transparent 40%); }
+.hero-media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(95deg, rgb(11 18 27 / .86) 0%, rgb(11 18 27 / .62) 38%, rgb(11 18 27 / .18) 70%, rgb(11 18 27 / .08) 100%), linear-gradient(0deg, rgb(11 18 27 / .75), transparent 32%), linear-gradient(180deg, rgb(11 18 27 / .55), transparent 18%); }
+@media (max-width: 900px) { .hero-media::after { background: linear-gradient(180deg, rgb(11 18 27 / .7), rgb(11 18 27 / .78) 60%, rgb(11 18 27 / .9)); } }
 .hero-grid { display: grid; grid-template-columns: 1.25fr .9fr; gap: 56px; align-items: center; }
 .hero .eyebrow { color: var(--on-brand-accent); }
-.hero h1 .line { display: block; } .hero h1 .accent { color: var(--on-brand-accent); }
+.hero h1 .line { display: block; text-shadow: 0 2px 24px rgb(0 0 0 / .35); }
+.hero .lead { text-shadow: 0 1px 12px rgb(0 0 0 / .4); } .hero h1 .accent { color: var(--on-brand-accent); }
 .hero .lead { color: var(--on-brand-muted); max-width: 56ch; }
 .hero .fine { color: var(--on-brand-muted); }
 .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 14px; }
 .hero-card { background: rgb(15 22 32 / .55); border: 1px solid rgb(255 255 255 / .16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 24px; padding: 18px; box-shadow: 0 30px 80px rgb(0 0 0 / .45); }
 .card-label { font-family: var(--display); font-weight: 700; margin: 2px 4px 12px; color: #fff; }
-.hero-card .voice, .hero-card .transcript summary { color: var(--on-brand-muted); }
-.hero-card .transcript li { color: var(--on-brand-muted); } .hero-card .transcript li[aria-current="true"] { color: #fff; }
+.hero-card .voice { color: var(--on-brand-muted); }
 .video-toggle { position: absolute; right: 20px; bottom: 92px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgb(255 255 255 / .5); background: rgb(0 0 0 / .35); color: #fff; place-items: center; cursor: pointer; display: none; }
 .js .video-toggle { display: grid; }
 .video-toggle .icon { width: 18px; height: 18px; }
@@ -215,10 +216,6 @@ html[lang="fr-CA"] .agent-card { min-height: 825px; }
 @media (prefers-color-scheme: dark) { .btn.play, .btn.play:hover { color: #0f1620; } }
 .btn.play[aria-pressed="true"] .icon path { d: path("M8 5v14M16 5v14"); }
 .voice { font-size: .8125rem; color: var(--muted); }
-.transcript { margin-top: 10px; } .transcript summary { cursor: pointer; font-weight: 600; min-height: 32px; }
-.transcript ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
-.transcript li { color: var(--muted); } .transcript li[aria-current="true"] { color: var(--text); font-weight: 600; }
-.js .transcript:not([open]) ol { display: none; }
 
 /* ---------------------------------------------------------------- A day with your AI team */
 .timeline { list-style: none; margin: 0; padding: 0; position: relative; display: grid; gap: 72px; }
@@ -313,7 +310,7 @@ details.faq p { margin: 10px 0 0; color: var(--muted); }
 }
 @media (max-width: 900px) {
   .section { padding: 80px 0; }
-  .hero { padding: 112px 0 120px; min-height: auto; }
+  .hero { padding: 112px 0 120px; }
   .hero-grid { grid-template-columns: 1fr; gap: 32px; }
   .tabs { grid-template-columns: 1fr; gap: 16px; }
   .tablist { position: static; display: flex; overflow-x: auto; gap: 8px; padding: 4px 2px 10px; max-height: none; scroll-snap-type: x proximity; }
@@ -359,3 +356,5 @@ details.faq p { margin: 10px 0 0; color: var(--muted); }
   .stage.speaking .wave i { height: 12px; }
   .big-play::after { display: none; }
 }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

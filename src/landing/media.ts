@@ -83,12 +83,26 @@ export const TRADE_PHOTO: Record<string, Photo> = {
   painting: P("painter-wall"), "appliance-repair": P("appliance-repair"),
 };
 
-/** Hero background: a slow pan across six of the photos above (made with ffmpeg; muted, looping). */
-export const HERO_VIDEO = { mp4: "hero.mp4", webm: "hero.webm", poster: "hero-poster.jpg",
-  from: ["snow-plow", "lawn-mowing", "plumber-kitchen", "cleaning-cabinets", "painter-wall", "appliance-repair"] };
-
-export const CREDITS: Credit[] = [
-  ...Object.values(SOURCES),
-  { title: "Hero background video", author: "CONARO, from the photos listed here (frankieleon, rattandirectuk, Heatable, Shixart1985, StockyPics)", license: "CC BY 2.0",
-    source: "https://creativecommons.org/licenses/by/2.0/", changes: { en: "combined into a video with pans and crossfades", fr: "assemblées en vidéo avec panoramiques et fondus" } },
+/** Hero background: real footage of local work (Mixkit Stock Video Free License: commercial use allowed), cut into one
+ *  muted, looping 22-second video with crossfades (made with ffmpeg; files in public/media). */
+export const HERO_VIDEO = { mp4: "hero.mp4", webm: "hero.webm", poster: "hero-poster.jpg" };
+const TRIMMED = { en: "trimmed and combined into the background video", fr: "coupée et assemblée dans la vidéo de fond" };
+const HERO_CLIPS: Credit[] = [
+  { title: "Snowing on the streets of Canada", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/snowing-on-the-streets-of-canada-3323/", changes: TRIMMED },
+  { title: "Carpenter marking a piece of wood", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/carpenter-marking-a-piece-of-wood-778/", changes: TRIMMED },
+  { title: "Delivering a package to the door of a house", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/delivering-a-package-to-the-door-of-a-house-31155/", changes: TRIMMED },
+  { title: "Mechanic repairing a car engine", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/mechanic-repairing-a-car-engine-4716/", changes: TRIMMED },
+  { title: "Gardener arranging the soil for a plant", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/gardener-arranging-the-soil-for-a-plant-43697/", changes: TRIMMED },
+  { title: "Hand of a carpenter leveling a wooden board", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/hand-of-a-carpenter-leveling-a-wooden-board-39684/", changes: TRIMMED },
+  { title: "Man answering a whatsapp", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/man-answering-a-whatsapp-41165/", changes: TRIMMED },
 ];
+
+/** Explainer narration: AI voices made with Piper (open-source text-to-speech) from models trained on these recordings. */
+const VOICES: Credit[] = [
+  { title: "Narration voice (English): Piper en_US-ljspeech-high, trained on the LJ Speech Dataset", author: "Keith Ito and Linda Johnson; Piper voice by the Rhasspy project", license: "Public domain (dataset); MIT (Piper)",
+    source: "https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/high", changes: { en: "used to generate the English explainer audio", fr: "utilisée pour produire l'audio des présentations en anglais" } },
+  { title: "Narration voice (French): Piper fr_FR-siwis-medium, trained on the SIWIS French Speech Synthesis Database", author: "Junichi Yamagishi, Pierre-Edouard Honnet et al. (University of Edinburgh, Idiap); Piper voice by the Rhasspy project", license: "CC BY 4.0 (dataset); MIT (Piper)",
+    source: "https://datashare.ed.ac.uk/handle/10283/2353", changes: { en: "used to generate the French explainer audio", fr: "utilisée pour produire l'audio des présentations en français" } },
+];
+
+export const CREDITS: Credit[] = [...HERO_CLIPS, ...Object.values(SOURCES), ...VOICES];

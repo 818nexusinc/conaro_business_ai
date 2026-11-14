@@ -290,6 +290,15 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
         return res.end(method === "HEAD" ? undefined : body);
       } catch { return send(res, 404, "Not found", "text/plain"); }
     }
+    const audioFile = path.match(/^\/audio\/(en|fr)\/([a-z-]{2,40})\.mp3$/);
+    if (audioFile && (method === "GET" || method === "HEAD")) {
+      try {
+        const body = await readFile(join(process.cwd(), "public", "audio", audioFile[1]!, `${audioFile[2]}.mp3`));
+        res.setHeader("Cache-Control", "public, max-age=604800"); res.setHeader("Accept-Ranges", "none");
+        res.statusCode = 200; res.setHeader("Content-Type", "audio/mpeg");
+        return res.end(method === "HEAD" ? undefined : body);
+      } catch { return send(res, 404, "Not found", "text/plain"); }
+    }
     if (path === "/static/app.css" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=3600"); return send(res, 200, CSS, "text/css; charset=utf-8"); }
     if (path === "/healthz") return send(res, 200, JSON.stringify({ ok: true }), "application/json");
 

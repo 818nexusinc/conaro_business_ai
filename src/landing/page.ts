@@ -7,6 +7,7 @@ import { AGENT_COPY, DEPTS, type AgentCopy, type Dept } from "./agents-copy.ts";
 import { COPY, INDUSTRY_FR, PLAN_FEATURES_FR, PLAN_NAME_FR, SIGNUP_ERRORS_FR } from "./copy.ts";
 import { MARKETING_CONSENT_WORDING, MARKETING_CONSENT_WORDING_FR } from "./signup.ts";
 import { seconds } from "./presenters.ts";
+import { NARRATION } from "./narration.ts";
 import { AGENT_PHOTO, CREDITS, DAY_PHOTOS, HERO_VIDEO, TRADE_PHOTO, type Photo } from "./media.ts";
 
 export interface LandingOptions {
@@ -48,7 +49,9 @@ function img(p: Photo, lang: Lang, cls = "", eager = false): Html {
 function player(o: LandingOptions, key: string, name: string, lines: string[], photo: Photo, cls = "", badge?: Html): Html {
   const c = COPY[o.lang].player;
   const vb = o.videoBase?.replace(/\/$/, "");
-  const ab = o.audioBase?.replace(/\/$/, "");
+  // Recorded narration: the configured folder, else the AI-voice files that ship with the site (public/audio).
+  const ab = o.audioBase?.replace(/\/$/, "") ?? (NARRATION[o.lang][key] ? "/audio" : undefined);
+  const times = !o.audioBase ? NARRATION[o.lang][key] : undefined;
   const frame = vb
     ? html`<video class="video" controls preload="none" playsinline poster="${vb}/${o.lang}/${key}.jpg" aria-label="${name}">
         <source src="${vb}/${o.lang}/${key}.mp4" type="video/mp4"><track kind="captions" srclang="${o.lang}" label="${o.lang === "fr" ? "Français" : "English"}" src="/captions/${o.lang}/${key}.vtt" default></video>`
@@ -59,14 +62,14 @@ function player(o: LandingOptions, key: string, name: string, lines: string[], p
         <span class="big-play js-only" data-play-overlay aria-hidden="true">${svg(ICON.play)}</span>
         <p class="live-caption" data-caption aria-hidden="true">${lines[0] ?? ""}</p>
       </div>`;
-  return html`<div class="player ${cls}" data-player data-lang="${HTML_LANG[o.lang]}"${!vb && ab ? html` data-audio="${ab}/${o.lang}/${key}.mp3"` : ""}${vb ? html` data-video` : ""}>
+  return html`<div class="player ${cls}" data-player data-lang="${HTML_LANG[o.lang]}"${!vb && ab ? html` data-audio="${ab}/${o.lang}/${key}.mp3"` : ""}${!vb && times ? html` data-times="${times.join(",")}"` : ""}${vb ? html` data-video` : ""}>
   <div class="frame">${frame}</div>
   ${vb ? "" : html`<div class="player-bar">
     <button type="button" class="btn play js-only" data-play data-label-play="${c.play}" data-label-pause="${c.pause}" data-label-replay="${c.replay}" aria-pressed="false">${svg(ICON.play)}<span>${c.play}</span></button>
     <span class="meta"><span class="duration">${COPY[o.lang].about(seconds(o.lang, lines))}</span>
     <span class="voice" data-voice aria-live="polite" data-device="${c.voiceDevice("{v}")}" data-recorded="${c.voiceRecorded}" data-none="${c.noVoice}"></span></span>
   </div>`}
-  <details class="transcript"><summary>${c.transcript}</summary><ol data-lines>${lines.map((l) => html`<li>${l}</li>`)}</ol></details>
+  <div class="sr-only"><p>${c.transcript}</p><ol data-lines>${lines.map((l) => html`<li>${l}</li>`)}</ol></div>
 </div>`;
 }
 
@@ -167,7 +170,6 @@ ${o.lang === "fr" && !o.frReviewedBy ? html`<p class="review-note" role="note">$
       <h1 id="hero-title"><span class="line">${c.h1.split(". ")[0]}.</span> <span class="line accent">${c.h1.split(". ").slice(1).join(". ")}</span></h1>
       <p class="lead">${c.lead(AGENT_COPY.length)}</p>
       <div class="cta-row"><a class="btn primary" href="#plans">${c.ctaPlans}${svg(ICON.arrow)}</a><a class="btn ghost" href="#team">${c.ctaMeet}</a></div>
-      <p class="fine">${c.fine}</p>
     </div>
     <div class="hero-card">
       <p class="card-label">${c.heroListen}</p>

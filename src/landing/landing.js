@@ -70,36 +70,46 @@
   };
   Player.prototype.finish = function () {
     this.playing = false; this.setSpeaking(false); this.label("replay");
+    if (this.audio) this.audio.currentTime = 0;
     if (this.caption) this.caption.textContent = this.lines[0] || "";
     for (var k = 0; k < this.items.length; k++) this.items[k].removeAttribute("aria-current");
-  };
-  Player.prototype.stop = function (byUser) {
-    this.playing = false;
-    if (this.audio) this.audio.pause();
-    if (synth) synth.cancel();
-    clearTimeout(this.timer);
-    this.setSpeaking(false); this.label(byUser ? "play" : "play");
   };
   // Recorded narration (natural human voice): captions follow the audio, line by line by length.
   Player.prototype.playAudio = function () {
     var self = this;
     if (!this.audio) {
       this.audio = new Audio(this.audioSrc);
+      this.audio.preload = "auto";
+      // Line start times from the recording (data-times); otherwise spread by word count.
+      var times = (this.el.getAttribute("data-times") || "").split(",").filter(Boolean).map(Number);
       var words = this.lines.map(function (l) { return l.split(/\s+/).length; });
       var total = words.reduce(function (a, b) { return a + b; }, 0);
       this.audio.addEventListener("timeupdate", function () {
-        if (!self.audio.duration) return;
-        var at = self.audio.currentTime / self.audio.duration * total, acc = 0;
-        for (var i = 0; i < words.length; i++) { acc += words[i]; if (at < acc) { if (i !== self.index) self.show(i); break; } }
+        var t = self.audio.currentTime, i = 0;
+        if (times.length === self.lines.length) { while (i + 1 < times.length && t >= times[i + 1]) i++; }
+        else if (self.audio.duration) { var at = t / self.audio.duration * total, acc = 0; for (i = 0; i < words.length; i++) { acc += words[i]; if (at < acc) break; } }
+        if (i !== self.index && i < self.lines.length) self.show(i);
       });
       this.audio.addEventListener("ended", function () { self.finish(); });
-      this.audio.addEventListener("error", function () { self.audioSrc = null; self.audio = null; if (self.playing) { synth ? self.speak(0) : self.captionsOnly(0); } });
+      this.audio.addEventListener("error", function () { self.fallback(); });
     }
     this.note(this.voiceEl ? this.voiceEl.getAttribute("data-recorded") : "");
     this.show(0);
     this.audio.currentTime = 0;
     var p = this.audio.play();
-    if (p && p.catch) p.catch(function () { self.audioSrc = null; self.audio = null; if (self.playing) { synth ? self.speak(0) : self.captionsOnly(0); } });
+    if (p && p.catch) p.catch(function (e) { if (e && e.name === "NotAllowedError") { self.stop(true); return; } self.fallback(); });
+  };
+  // The recording could not play: use the device's voice, or captions alone.
+  Player.prototype.fallback = function () {
+    this.audioSrc = null; this.audio = null;
+    if (this.playing) { synth ? this.speak(0) : this.captionsOnly(0); }
+  };
+  Player.prototype.stop = function (byUser) {
+    this.playing = false;
+    if (this.audio) this.audio.pause();
+    if (synth && !this.audioSrc) synth.cancel();
+    clearTimeout(this.timer);
+    this.setSpeaking(false); this.label("play");
   };
   // The device's own voice, chosen for naturalness, one caption line per utterance.
   Player.prototype.speak = function (i) {

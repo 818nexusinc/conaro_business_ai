@@ -7,6 +7,7 @@ import { freshDb, bai, SECRET } from "./fixtures.ts";
 import { createPortalServer } from "../src/portal/server.ts";
 import { AGENT_COPY } from "../src/landing/agents-copy.ts";
 import { existsSync } from "node:fs";
+import { NARRATION } from "../src/landing/narration.ts";
 import { AGENT_PHOTO, CREDITS, DAY_PHOTOS, HERO_VIDEO, TRADE_PHOTO } from "../src/landing/media.ts";
 import { COPY, INDUSTRY_FR, PLAN_FEATURES_FR, PLAN_NAME_FR } from "../src/landing/copy.ts";
 import { AGENTS } from "../src/catalog/agents.ts";
@@ -77,7 +78,12 @@ describe("photos and video", () => {
       expect(CREDITS.some((c) => c.source.includes(".org/wiki/File:")), p.file).toBe(true);
     }
     for (const f of [HERO_VIDEO.mp4, HERO_VIDEO.webm, HERO_VIDEO.poster]) expect(existsSync(new URL(`../public/media/${f}`, import.meta.url)), f).toBe(true);
-    for (const c of CREDITS) { expect(c.author).toBeTruthy(); expect(c.license).toMatch(/^(CC BY|CC0|Public domain)/); expect(c.changes).toBeTruthy(); }
+    // Narration ships for every explainer, with one start time per script line.
+    for (const lang of ["en", "fr"] as const) for (const a of AGENT_COPY) {
+      expect(existsSync(new URL(`../public/audio/${lang}/${a.id}.mp3`, import.meta.url)), `${lang}/${a.id}`).toBe(true);
+      expect(NARRATION[lang][a.id]?.length, `${lang}/${a.id} timings (run scripts/gen-narration.py)`).toBe(a.script[lang].length);
+    }
+    for (const c of CREDITS) { expect(c.author).toBeTruthy(); expect(c.license).toMatch(/^(CC BY|CC0|Public domain|Mixkit Stock Video Free License$)/); expect(c.changes).toBeTruthy(); }
   });
 });
 
@@ -92,6 +98,8 @@ describe("landing page", () => {
     const body = await r.text();
     expect(body).toContain('<html lang="en-CA">');
     expect(body).toContain('<script src="/static/landing.js" defer></script>');
+    expect(body).toContain('data-audio="/audio/en/booking.mp3" data-times="0,');
+    expect(body.slice(body.indexOf('class="hero"'), body.indexOf('id="team"'))).not.toContain("No card needed");
     expect(body.match(/role="tab" /g)?.length).toBe(AGENT_COPY.length);
     for (const a of AGENT_COPY) {
       expect(body, a.id).toContain(`id="agent-${a.id}"`);
@@ -104,6 +112,8 @@ describe("landing page", () => {
     expect(body).not.toMatch(/testimonial|★/i);
     expect(body).toContain('hreflang="fr-CA"');
     expect((await fetch(`${base}/static/landing.js`)).headers.get("content-type")).toContain("javascript");
+    expect((await fetch(`${base}/audio/fr/booking.mp3`)).headers.get("content-type")).toBe("audio/mpeg");
+    expect((await fetch(`${base}/audio/fr/nobody.mp3`)).status).toBe(404);
     expect((await fetch(`${base}/`, { method: "HEAD" })).status).toBe(200);
   });
 
