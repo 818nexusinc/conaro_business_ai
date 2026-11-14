@@ -42,6 +42,9 @@
     this.playing = false; this.index = 0; this.timer = null; this.audio = null;
     var self = this;
     if (this.button) this.button.addEventListener("click", function () { self.playing ? self.stop(true) : self.play(); });
+    // The large button over the photo is a mouse/touch shortcut for the same control (hidden from assistive tech).
+    var overlay = el.querySelector("[data-play-overlay]");
+    if (overlay) overlay.addEventListener("click", function () { if (!self.playing) self.play(); });
   }
   Player.prototype.label = function (state) {
     if (!this.button) return;
@@ -156,6 +159,20 @@
         else if (e.key === "End") to = n - 1;
         else if (e.key === " " || e.key === "Enter") { e.preventDefault(); select(i, false); return; }
         if (to !== null) { e.preventDefault(); select(to, true); }
+      });
+    });
+    // "Previous agent" / "Next agent" inside each card.
+    panels.forEach(function (panel, k) {
+      Array.prototype.forEach.call(panel.querySelectorAll("[data-step]"), function (btn) {
+        btn.addEventListener("click", function () {
+          var to = (k + Number(btn.getAttribute("data-step")) + tabs.length) % tabs.length;
+          select(to, false);
+          if (history.replaceState) history.replaceState(null, "", "#" + panels[to].id);
+          var again = panels[to].querySelector('[data-step="' + btn.getAttribute("data-step") + '"]');
+          if (again) again.focus({ preventScroll: true });
+          var top = root.getBoundingClientRect().top;
+          if (top < 0) root.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+        });
       });
     });
     var fromHash = panels.findIndex(function (p) { return p && "#" + p.id === location.hash; });

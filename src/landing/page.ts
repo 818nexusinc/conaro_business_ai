@@ -6,6 +6,7 @@ import { HTML_LANG, type Lang } from "../i18n.ts";
 import { AGENT_COPY, DEPTS, type AgentCopy, type Dept } from "./agents-copy.ts";
 import { COPY, INDUSTRY_FR, PLAN_FEATURES_FR, PLAN_NAME_FR, SIGNUP_ERRORS_FR } from "./copy.ts";
 import { MARKETING_CONSENT_WORDING, MARKETING_CONSENT_WORDING_FR } from "./signup.ts";
+import { seconds } from "./presenters.ts";
 import { AGENT_PHOTO, CREDITS, DAY_PHOTOS, HERO_VIDEO, TRADE_PHOTO, type Photo } from "./media.ts";
 
 export interface LandingOptions {
@@ -26,7 +27,9 @@ const svg = (path: string) => html`<svg class="icon" viewBox="0 0 24 24" width="
 const ICON = {
   check: "M5 12.5l4.5 4.5L19 7.5", play: "M8 5l11 7-11 7z", pause: "M8 5v14M16 5v14", arrow: "M5 12h14M13 6l6 6-6 6",
   globe: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z",
-  auto: "M12 3v4M12 17v4M3 12h4M17 12h4M12 8a4 4 0 100 8 4 4 0 000-8z", rules: "M4 6h16M4 12h10M4 18h6M17 15l2 2 3-4", ok: "M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6l7-3zM9 12l2 2 4-4",
+  auto: "M12 3v4M12 17v4M3 12h4M17 12h4M12 8a4 4 0 100 8 4 4 0 000-8z", prev: "M19 12H5M11 6l-6 6 6 6",
+  manage: "M12 3l2.6 5.6 6 .6-4.5 4 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.5-4 6-.6z", front: "M4 5h16v11H9l-5 4z", jobs: "M4 6h16v14H4zM4 10h16M9 3v4M15 3v4",
+  money: "M12 3v18M16 7.5c0-1.9-1.8-3-4-3s-4 1.1-4 3 1.8 2.6 4 3 4 1.1 4 3-1.8 3-4 3-4-1.1-4-3", growth: "M3 17l6-6 4 4 8-8M15 7h6v6", office: "M3 6h6l2 2h10v11H3z", rules: "M4 6h16M4 12h10M4 18h6M17 15l2 2 3-4", ok: "M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6l7-3zM9 12l2 2 4-4",
 };
 const planName = (lang: Lang, p: Plan) => (lang === "fr" ? PLAN_NAME_FR[p.id] ?? p.name : p.name);
 const agentName = (lang: Lang, id: string) => AGENT_COPY.find((a) => a.id === id)?.name[lang] ?? agentDef(id).name.replace(/^AI /, "");
@@ -42,7 +45,7 @@ function img(p: Photo, lang: Lang, cls = "", eager = false): Html {
  * (recorded narration if present, else the device's most natural voice, chosen by /static/landing.js) with
  * live captions. Without JavaScript the full script is shown.
  */
-function player(o: LandingOptions, key: string, name: string, lines: string[], photo: Photo, cls = ""): Html {
+function player(o: LandingOptions, key: string, name: string, lines: string[], photo: Photo, cls = "", badge?: Html): Html {
   const c = COPY[o.lang].player;
   const vb = o.videoBase?.replace(/\/$/, "");
   const ab = o.audioBase?.replace(/\/$/, "");
@@ -51,32 +54,52 @@ function player(o: LandingOptions, key: string, name: string, lines: string[], p
         <source src="${vb}/${o.lang}/${key}.mp4" type="video/mp4"><track kind="captions" srclang="${o.lang}" label="${o.lang === "fr" ? "Français" : "English"}" src="/captions/${o.lang}/${key}.vtt" default></video>`
     : html`<div class="stage" data-stage>
         ${img(photo, o.lang, "stage-photo")}
+        ${badge ?? ""}
         <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="big-play js-only" data-play-overlay aria-hidden="true">${svg(ICON.play)}</span>
         <p class="live-caption" data-caption aria-hidden="true">${lines[0] ?? ""}</p>
       </div>`;
   return html`<div class="player ${cls}" data-player data-lang="${HTML_LANG[o.lang]}"${!vb && ab ? html` data-audio="${ab}/${o.lang}/${key}.mp3"` : ""}${vb ? html` data-video` : ""}>
   <div class="frame">${frame}</div>
   ${vb ? "" : html`<div class="player-bar">
     <button type="button" class="btn play js-only" data-play data-label-play="${c.play}" data-label-pause="${c.pause}" data-label-replay="${c.replay}" aria-pressed="false">${svg(ICON.play)}<span>${c.play}</span></button>
-    <span class="voice" data-voice aria-live="polite" data-device="${c.voiceDevice("{v}")}" data-recorded="${c.voiceRecorded}" data-none="${c.noVoice}"></span>
+    <span class="meta"><span class="duration">${COPY[o.lang].about(seconds(o.lang, lines))}</span>
+    <span class="voice" data-voice aria-live="polite" data-device="${c.voiceDevice("{v}")}" data-recorded="${c.voiceRecorded}" data-none="${c.noVoice}"></span></span>
   </div>`}
   <details class="transcript"><summary>${c.transcript}</summary><ol data-lines>${lines.map((l) => html`<li>${l}</li>`)}</ol></details>
 </div>`;
 }
 
-function agentPanel(o: LandingOptions, a: AgentCopy, selected: boolean): Html {
+function agentPanel(o: LandingOptions, a: AgentCopy, selected: boolean, i: number, all: AgentCopy[]): Html {
   const c = COPY[o.lang];
-  const plans = PLANS.filter((p) => isEntitled(p.id, [], a.id)).map((p) => planName(o.lang, p));
-  return html`<section class="panel" role="tabpanel" id="agent-${a.id}" aria-labelledby="tab-${a.id}" tabindex="0"${selected ? "" : html` data-unselected`}>
-  <div class="panel-grid">
-    ${player(o, a.id, a.name[o.lang], a.script[o.lang], AGENT_PHOTO[a.id]!)}
-    <div class="panel-text">
-      <p class="eyebrow">${DEPTS[a.dept][o.lang]}</p>
+  const included = PLANS.filter((p) => isEntitled(p.id, [], a.id));
+  const first = included[0]!;
+  const prev = all[(i - 1 + all.length) % all.length]!; const next = all[(i + 1) % all.length]!;
+  const badge = html`<span class="stage-badge">${svg(ICON[a.dept])}${c.agentBadge}</span>`;
+  return html`<section class="panel dept-${a.dept}" role="tabpanel" id="agent-${a.id}" aria-labelledby="tab-${a.id}" tabindex="0"${selected ? "" : html` data-unselected`}>
+  <div class="agent-card">
+    <header class="agent-head">
+      <p class="dept-chip">${svg(ICON[a.dept])}<span>${DEPTS[a.dept][o.lang]}</span></p>
       <h3>${a.name[o.lang]}</h3>
       <p class="summary">${a.summary[o.lang]}</p>
-      <ol class="how">${a.how[o.lang].map((s) => html`<li>${s}</li>`)}</ol>
-      <p class="included"><b>${c.plansIncluding}</b> ${plans.length === PLANS.length ? c.allPlans : plans.join(" · ")}</p>
+    </header>
+    <div class="agent-body">
+      ${player(o, a.id, a.name[o.lang], a.script[o.lang], AGENT_PHOTO[a.id]!, "", badge)}
+      <div class="agent-side">
+        <h4>${c.howItWorks}</h4>
+        <ol class="stepper">${a.how[o.lang].map((s) => html`<li>${s}</li>`)}</ol>
+        <div class="agent-plans">
+          <p class="label">${c.plansIncluding}</p>
+          <ul class="plan-chips">${PLANS.map((p) => included.includes(p) ? html`<li class="on">${svg(ICON.check)}${planName(o.lang, p)}</li>` : "")}</ul>
+        </div>
+        <a class="btn primary small start-link" href="/?lang=${o.lang}&amp;plan=${first.id}#start" data-choose="${first.id}" data-name="${planName(o.lang, first)}">${c.startWith(planName(o.lang, first))}${svg(ICON.arrow)}</a>
+      </div>
     </div>
+    <footer class="agent-nav js-only">
+      <button type="button" class="nav-btn" data-step="-1" aria-label="${c.prevAgent}: ${prev.name[o.lang]}">${svg(ICON.prev)}<span>${prev.name[o.lang]}</span></button>
+      <span class="count">${c.ofAgents(i + 1, all.length)}</span>
+      <button type="button" class="nav-btn next" data-step="1" aria-label="${c.nextAgent}: ${next.name[o.lang]}"><span>${next.name[o.lang]}</span>${svg(ICON.arrow)}</button>
+    </footer>
   </div>
 </section>`;
 }
@@ -108,6 +131,7 @@ export function landingPage(o: LandingOptions): string {
   const error = o.error && o.lang === "fr" ? o.error.split(" | ").map((m) => SIGNUP_ERRORS_FR[m] ?? m).join(" ") : o.error?.split(" | ").join(" ");
   const depts = Object.keys(DEPTS) as Dept[];
   const manager = AGENT_COPY.find((a) => a.id === "business-manager")!;
+  const ordered = depts.flatMap((d) => AGENT_COPY.filter((a) => a.dept === d));
   const industry = (id: string, name: string) => (o.lang === "fr" ? INDUSTRY_FR[id] ?? name : name);
   const strip = html`${INDUSTRY_PACKS.map((p) => TRADE_PHOTO[p.id]
     ? html`<li class="trade">${img(TRADE_PHOTO[p.id]!, o.lang)}<span>${industry(p.id, p.name)}</span></li>`
@@ -163,9 +187,9 @@ ${o.lang === "fr" && !o.frReviewedBy ? html`<p class="review-note" role="note">$
     </div>
     <div class="tabs" data-tabs data-reveal>
       <div class="tablist" role="tablist" aria-label="${c.tabsLabel}" aria-orientation="vertical">
-        ${depts.map((d) => html`<p class="tab-group" aria-hidden="true">${DEPTS[d][o.lang]}</p>${AGENT_COPY.filter((a) => a.dept === d).map((a) => html`<a role="tab" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}">${a.name[o.lang]}</a>`)}`)}
+        ${depts.map((d) => html`<p class="tab-group dept-${d}" aria-hidden="true">${svg(ICON[d])}${DEPTS[d][o.lang]}</p>${AGENT_COPY.filter((a) => a.dept === d).map((a) => html`<a role="tab" class="dept-${a.dept}" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}"><span class="dot" aria-hidden="true"></span>${a.name[o.lang]}</a>`)}`)}
       </div>
-      <div class="panels">${depts.flatMap((d) => AGENT_COPY.filter((a) => a.dept === d)).map((a) => agentPanel(o, a, a.id === "customer-service"))}</div>
+      <div class="panels">${ordered.map((a, i) => agentPanel(o, a, a.id === "customer-service", i, ordered))}</div>
     </div>
   </div>
 </section>
