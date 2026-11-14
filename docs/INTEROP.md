@@ -85,13 +85,37 @@ token = base64url(JSON {"v":1,"providerRef":"…","email":"…","exp":<unix seco
 
 `signSsoToken()` in `src/interop/sso.ts` is the reference implementation. The token works once and for 2 minutes, and only for a person who is **already a member** of the workspace linked to that provider. It cannot create accounts or grant access.
 
+## 3a. Marketplace kit (ready to copy)
+
+`integration/marketplace-kit/provider-feed.ts` is the marketplace's side of §2 and §3, independent of any framework and tested end to end against Business AI (`tests/marketplace-kit.test.ts`):
+
+- `handleProviderFeed(request, savedKey, port)` checks the signature and freshness, refuses replays (through the port), validates the provider id, pages by a cursor, and **always sends `customer: null` on requests**, whatever the port returns. Customers are only shared on bookings.
+- `ProviderFeedPort` is the only part the marketplace writes. It has four read-only methods over its own tables: the provider's status, requests and bookings changed after the cursor (ordered by change time, then id), and recording a one-time code.
+- `businessAiSignInUrl(baseUrl, savedKey, providerRef, email)` makes the "Open Business AI" link for the signed-in provider.
+
+Wiring it into the marketplace (Next.js App Router), in outline:
+
+```ts
+// src/app/api/bai/v1/provider-feed/route.ts
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const headers = Object.fromEntries(req.headers);            // lower-case names
+  const r = await handleProviderFeed({ method: "GET", pathAndQuery: url.pathname + url.search, headers },
+    await readBusinessAiKey(),                                 // saved in Admin, encrypted like the BOS key
+    marketplaceFeedPort);                                       // SQL over providers, service_requests/leads, bookings
+  return Response.json(r.body, { status: r.status });
+}
+```
+
+Use the marketplace's own `src/lib/link-protocol.ts` in place of the kit's import (the files are identical). Save the Business AI key **separately** from the BOS key.
+
 ## 4. BOS → Business AI: summary
 
 ```
 GET {BAI_PUBLIC_URL}/api/link/v1/summary      (signed with BAI_BOS_LINK_SECRET)
 ```
 
-It returns counts only (type `BusinessAiSummary` in `src/interop/bos.ts`): workspaces by status, plan and industry; how many are paused or linked to the marketplace; workflow runs and actions in the last 24 hours; approvals and issues waiting; marketplace sync health. It returns no business name, no customer and no business's figures. To show it in the BOS, add a client next to `src/integrations/marketplace-link.ts` that calls this with `signLinkRequest(BAI_BOS_LINK_SECRET, "GET", "/api/link/v1/summary")`; that is a change for the BOS repository, made when the owner wants it.
+It returns counts only (type `BusinessAiSummary` in `src/interop/bos.ts`): workspaces by status, plan and industry; how many are paused or linked to the marketplace; workflow runs and actions in the last 24 hours; approvals and issues waiting; marketplace sync health. It returns no business name, no customer and no business's figures. The BOS client is `src/integrations/business-ai-link.ts` in the BOS repository (optional; off unless `BAI_URL` and `BAI_BOS_LINK_SECRET` are set there). It is verified against this application's real server.
 
 ## 5. Sharing a database (optional)
 
@@ -101,6 +125,6 @@ Business AI may use its own PostgreSQL database (recommended) or the BOS's. Ever
 
 1. Generate two different random keys (32+ characters).
 2. Business AI host: `BAI_MARKETPLACE_LINK_SECRET`, `BAI_BOS_LINK_SECRET`, `MARKETPLACE_BASE_URL`, `BAI_PUBLIC_URL`.
-3. Marketplace: save the first key for Business AI (separate from its BOS key) once the provider-feed endpoint and the "Open Business AI" button exist there.
-4. BOS: save the second key once it has the summary client.
+3. Marketplace: add the kit (§3a) and save the first key for Business AI, separate from its BOS key.
+4. BOS: set `BAI_URL` and `BAI_BOS_LINK_SECRET` (the second key). Its Marketplace link page then shows the summary (built in the BOS branch `claude/zealous-davinci-0lmd3t`).
 5. Check each link: `GET /api/link/v1/handshake?peer=marketplace` or `?peer=bos`, signed with that peer's key, answers `{"ok":true}`.
