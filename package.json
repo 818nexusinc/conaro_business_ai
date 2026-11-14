@@ -5,7 +5,7 @@
   "type": "module",
   "description": "CONARO Business AI: an AI workforce for each business on the CONARO marketplace. Multi-tenant, simulation-first, interoperates with the marketplace and the CONARO operating system over the signed link.",
   "engines": {
-    "node": ">=22"
+    "node": ">=22 <25"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -18,7 +18,7 @@
     "link-provider": "tsx scripts/link-provider.ts",
     "demo": "tsx scripts/demo.ts",
     "gen:assets": "tsx scripts/gen-assets.ts",
-    "build": "tsx scripts/gen-assets.ts && esbuild src/vercel-entry.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server.mjs --log-level=warning"
+    "build": "tsx scripts/gen-assets.ts && esbuild src/vercel-entry.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/handler.mjs --log-level=warning"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

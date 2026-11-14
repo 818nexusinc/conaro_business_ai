@@ -14,9 +14,13 @@ describe("deployment", () => {
     expect(readFileSync(new URL("../src/generated/assets.ts", import.meta.url), "utf8")).toBe(buildAssets());
   });
 
-  it("vercel.json schedules only a daily cron (Hobby plans refuse anything more frequent) on the cron endpoint", () => {
-    const v = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { crons: { path: string; schedule: string }[]; buildCommand: string };
+  it("vercel.json: build, every path to the one function, only robots.txt static, and only a daily cron (Hobby refuses more)", () => {
+    const v = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { crons: { path: string; schedule: string }[]; buildCommand: string; outputDirectory: string; rewrites: unknown[] };
     expect(v.buildCommand).toBe("npm run build");
+    expect(v.outputDirectory).toBe("public");
+    expect(v.rewrites).toEqual([{ source: "/(.*)", destination: "/api" }]);
+    expect(readFileSync(new URL("../api/index.mjs", import.meta.url), "utf8")).toContain('export { default } from "../dist/handler.mjs"');
+    expect(readFileSync(new URL("../public/robots.txt", import.meta.url), "utf8")).toContain("Disallow: /");
     expect(v.crons).toEqual([{ path: "/api/cron/tick", schedule: expect.stringMatching(/^\d+ \d+ \* \* \*$/) }]);
   });
 

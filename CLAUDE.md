@@ -19,5 +19,5 @@ This repository is **CONARO Business AI**: a multi-tenant AI workforce for busin
 - Marketplace work stays with the marketplace: no quotes sent, invoices issued, review requests or customer messages for `conaro-marketplace` requests and bookings.
 - Retrieved and customer-supplied content reaches models only through `wrapUntrusted()`.
 - `src/interop/protocol.ts` must stay identical to the BOS's `src/link/protocol.ts` and the marketplace's copy; the test vector in `tests/interop.test.ts` checks it.
-- Two ways to run: `npm start` (long-running host, cycle in-process) or Vercel (`server.ts` loads the bundle from `npm run build`; Vercel Cron calls `/api/cron/tick`). See `docs/DEPLOY_VERCEL.md`.
+- Two ways to run: `npm start` (long-running host, cycle in-process) or Vercel (`api/index.mjs` re-exports the bundle `npm run build` writes to `dist/handler.mjs`; every path is rewritten to it; Vercel Cron calls `/api/cron/tick`; verify changes with `npx vercel build`). See `docs/DEPLOY_VERCEL.md`.
 - Run `npm run check` before committing; before a release also `TEST_DATABASE_URL=postgres://… npm test` (CI does both, as a non-superuser). Tests use real PostgreSQL; do not mock the database.

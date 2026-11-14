@@ -1,7 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
   "crons": [
-    { "path": "/api/cron/tick", "schedule": "0 11 * * *" }
+    {
+      "path": "/api/cron/tick",
+      "schedule": "0 11 * * *"
+    }
   ]
 }

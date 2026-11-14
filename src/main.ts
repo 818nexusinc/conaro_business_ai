@@ -1,42 +1,63 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createContainer, type Container } from "./container.ts";
-import { createPortalServer } from "./portal/server.ts";
+import { createPortalHandler, type RequestListener } from "./portal/server.ts";
 import { runLockedCycle } from "./cycle-lock.ts";
 
-/**
- * Starts the control centre. With `loop`, also runs the agents' cycle every BAI_TICK_SECONDS in this
- * process (a long-running host). Without it (Vercel), the cycle runs when GET /api/cron/tick is called
- * with CRON_SECRET.
- */
-export async function start(opts: { loop: boolean }): Promise<Server> {
+export interface App { handler: RequestListener; container: Container | null; cycle: (() => ReturnType<typeof runLockedCycle>) | null }
+
+/** Explains a configuration problem on every request (names only, never values) instead of failing silently. */
+function problemHandler(message: string): RequestListener {
+  const reason = message.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
+  return (_req, res) => {
+    res.statusCode = 503;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(`<!doctype html><html lang="en-CA"><meta charset="utf-8"><title>CONARO Business AI cannot start</title><body style="font-family:system-ui;max-width:640px;margin:10vh auto;padding:0 16px"><h1>CONARO Business AI cannot start yet</h1><p>${reason}</p><p>Fix it in the host's environment variables, then redeploy. No secret values are shown here.</p></body></html>`);
+  };
+}
+
+/** Builds the application: configuration, database (migrations applied), control centre and cron endpoint. */
+export async function createApp(): Promise<App> {
   let c: Container;
   try {
     c = await createContainer();
   } catch (err) {
-    // Explain the problem on every request (names only, never values) instead of failing silently.
-    const reason = (err as Error).message.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
     console.error("[start-up]", (err as Error).message);
-    const s = createServer((_req, res) => {
-      res.statusCode = 503;
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "no-store");
-      res.end(`<!doctype html><html lang="en-CA"><meta charset="utf-8"><title>CONARO Business AI cannot start</title><body style="font-family:system-ui;max-width:640px;margin:10vh auto;padding:0 16px"><h1>CONARO Business AI cannot start yet</h1><p>${reason}</p><p>Fix it in the host's environment variables, then redeploy. No secret values are shown here.</p></body></html>`);
-    });
-    return s.listen(Number(process.env.PORT ?? process.env.BAI_PORT ?? 8790), process.env.PORT ? "0.0.0.0" : "127.0.0.1");
+    return { handler: problemHandler((err as Error).message), container: null, cycle: null };
   }
-  const port = c.env.PORT ?? c.env.BAI_PORT;
   const hosted = Boolean(c.env.PORT || c.env.VERCEL);
   const cycle = () => runLockedCycle(c.db, c.app.deps, c.marketplace ? { marketplace: c.marketplace } : {});
-  const server = createPortalServer({
+  const handler = createPortalHandler({
     db: c.db, app: c.app, linkSecret: c.env.BAI_UNSUBSCRIBE_SECRET,
     secure: c.env.BAI_PUBLIC_URL.startsWith("https://"), trustProxy: hosted,
     ...(c.env.BAI_MARKETPLACE_LINK_SECRET ? { marketplaceLinkSecret: c.env.BAI_MARKETPLACE_LINK_SECRET } : {}),
     ...(c.env.BAI_BOS_LINK_SECRET ? { bosLinkSecret: c.env.BAI_BOS_LINK_SECRET } : {}),
     ...(c.env.CRON_SECRET ? { cron: { secret: c.env.CRON_SECRET, run: cycle } } : {}),
   });
-  server.listen(port, hosted ? "0.0.0.0" : "127.0.0.1", () => console.log(`CONARO Business AI on port ${port} (simulation: no external effects)`));
+  return { handler, container: c, cycle };
+}
 
-  if (opts.loop) {
+let shared: Promise<App> | null = null;
+
+/** One application per process, created on the first request (Vercel Functions reuse instances). */
+export async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  shared ??= createApp();
+  (await shared).handler(req, res);
+}
+
+/**
+ * Long-running host: the control centre on $PORT (or BAI_PORT) and, with `loop`, the agents' cycle
+ * every BAI_TICK_SECONDS in this process.
+ */
+export async function start(opts: { loop: boolean }): Promise<Server> {
+  const app = await createApp();
+  const port = Number(process.env.PORT ?? app.container?.env.BAI_PORT ?? 8790);
+  const hosted = Boolean(process.env.PORT);
+  const server = createServer(app.handler);
+  server.listen(port, hosted ? "0.0.0.0" : "127.0.0.1", () => console.log(`CONARO Business AI on port ${port} (simulation: no external effects)`));
+  const c = app.container;
+  if (opts.loop && c && app.cycle) {
+    const cycle = app.cycle;
     let stopping = false;
     const tick = async () => {
       if (stopping) return;

@@ -6,7 +6,8 @@ Project: https://vercel.com/818nexus/conaro_business_ai (connected to `818nexusi
 
 | Piece | On Vercel |
 |---|---|
-| Control centre and the signed link endpoints | `server.ts` (root) is the Node.js server entry point Vercel detects. It loads `dist/server.mjs`, which `npm run build` bundles (set as the build command in `vercel.json`). The bundle reads no files at runtime: the SQL migrations and the stylesheet are embedded. |
+| Control centre and the signed link endpoints | One Vercel Function, `api/index.mjs`, which re-exports `dist/handler.mjs`. `npm run build` (the build command in `vercel.json`) bundles that file. `vercel.json` rewrites every path to the function. The bundle reads no files at runtime: the SQL migrations and the stylesheet are embedded. |
+| Static files | Only `public/robots.txt` (asks search engines not to index the control centre). `outputDirectory` is `public`, so no repository file is ever served as a static file. |
 | Database migrations | Applied automatically when an instance starts (serialised with a database lock). |
 | The agents' cycle | No background loop: **Vercel Cron** calls `GET /api/cron/tick` (in `vercel.json`) with `Authorization: Bearer $CRON_SECRET`. A database lease stops overlapping cycles; every step is idempotent, so a repeated or missed call is safe. |
 | Data | A hosted PostgreSQL in `DATABASE_URL`. The embedded database is refused on Vercel, because nothing on a function's disk persists. |
@@ -42,7 +43,7 @@ Vercel's limits ([R60](REFERENCE_CHECKS.md)): **Hobby** allows cron jobs **once 
 6. **Check the deployment:**
    - `GET /healthz` answers `{"ok":true}`.
    - `/login` shows the sign-in page.
-   - Sign in, and check that the other pages load. This confirms every path reaches the server, which Vercel's announcement does not state explicitly ([R63](REFERENCE_CHECKS.md)).
+   - Sign in, and check that the other pages load and forms submit (this confirms the rewrite passes the original path to the function, as the build output's routing table shows).
    - In Vercel → Schedules → Cron Jobs, select **Run** (or wait for the schedule). The log should show a 200 with `"ran":true`. A 401 means `CRON_SECRET` differs; redeploy after changing it.
 7. **Preview deployments** use the Preview environment's variables. Give them their own database, or leave them without `DATABASE_URL` (they then show the configuration message). Vercel only runs crons on production.
 
@@ -51,16 +52,16 @@ If a variable is missing or wrong, every page shows the problem (names only, nev
 ## Local equivalent
 
 ```bash
-npm run build
-VERCEL=1 PORT=3000 DATABASE_URL=postgres://… BAI_UNSUBSCRIBE_SECRET=… CRON_SECRET=… node server.ts
-curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/tick
+npx vercel@latest build --yes      # the same build Vercel runs (needs .vercel/project.json, e.g. from `vercel pull`)
 ```
 
-This was verified on 14 November 2026 against PostgreSQL 16 as a non-superuser:
+What was verified on 14 November 2026:
 
-- migrations applied from the bundle;
-- `/login` returned 200 with HSTS and CSP headers;
-- the cron endpoint returned 401 without the secret, and with it processed a newly created workspace (hourly and daily duties succeeded);
-- without `DATABASE_URL` the server answered 503 with the explanation.
+- **Build:** `vercel build` (Vercel CLI 65.16.0) completed. It produced one function on `nodejs24.x` and a routing table that sends every path to it after `robots.txt`, plus the daily cron.
+- **Packaged function, run by itself** against PostgreSQL 16 as a non-superuser:
+  - migrations applied from the bundle;
+  - `/healthz` and `/login` returned 200;
+  - the cron endpoint ran a cycle.
+- **The earlier `server.ts` approach failed:** Vercel built the repository as a static site (`No Output Directory named "public"`), because zero-configuration server detection only applies to the Express, Hono, H3, Koa, NestJS, Fastify and Elysia presets.
 
 A real Vercel deployment has not been observed from this environment: confirm with step 6.

@@ -84,7 +84,14 @@ const PAGES: Record<string, (ctx: P.PortalCtx) => Promise<string>> = {
 };
 const PAGE_PERMS: Record<string, Permission> = { "/chat": "chat", "/finance": "finance.view", "/enquiries": "customers.view", "/bookings": "customers.view", "/documents": "documents" };
 
+export type RequestListener = (req: IncomingMessage, res: ServerResponse) => void;
+
 export function createPortalServer(opts: PortalOptions): Server {
+  return createServer(createPortalHandler(opts));
+}
+
+/** The control centre as a plain request listener (used by a Node server and by a Vercel Function). */
+export function createPortalHandler(opts: PortalOptions): RequestListener {
   const { db, app } = opts;
   const secure = opts.secure ?? false;
   const ip = (req: IncomingMessage) => (opts.trustProxy ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "") || req.socket.remoteAddress || "unknown";
@@ -322,14 +329,14 @@ export function createPortalServer(opts: PortalOptions): Server {
     return send(res, 200, body);
   }
 
-  return createServer((req, res) => {
+  return (req, res) => {
     handle(req, res).catch((err) => {
       const status = err instanceof HttpError ? err.status : err instanceof AccessDeniedError ? 403 : 500;
       if (status === 500) console.error("[business-ai portal]", err);
       if (!res.headersSent) send(res, status, status === 500 ? "Something went wrong. It has been logged." : (err as Error).message, "text/plain");
       else res.end();
     });
-  });
+  };
 }
 
 function message(err: unknown): string {
