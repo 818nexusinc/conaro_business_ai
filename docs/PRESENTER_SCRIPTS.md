@@ -6,7 +6,7 @@ One explainer per AI agent, in both languages. On the page each explainer **spea
 
 ## What plays today
 
-Every explainer ships with an **AI-generated voice** (Piper, open-source text-to-speech: English `en_US-ljspeech-high`, French `fr_FR-siwis-medium`; licences in docs/REFERENCE_CHECKS.md R66). Files: `public/audio/<lang>/<key>.mp3`, line timings in `src/landing/narration.ts`. After changing a script, regenerate them: `npx tsx scripts/export-scripts.ts > /tmp/scripts.json && python3 scripts/gen-narration.py <piper> <voices-dir> /tmp/scripts.json`.
+Every explainer ships with a **natural AI voice** (Kokoro-82M, open-weight text-to-speech, Apache 2.0: English `af_heart`, French `ff_siwis`; licences in docs/REFERENCE_CHECKS.md R67), at a calm pace and soft loudness. Files: `public/audio/<lang>/<key>.mp3`, line timings in `src/landing/narration.ts`. After changing a script, regenerate them: `npx tsx scripts/export-scripts.ts > /tmp/scripts.json && <python with kokoro-onnx> scripts/gen-narration.py <kokoro-dir> /tmp/scripts.json`. The page labels it as an AI voice; real human recordings can replace it (below).
 
 ## Recording natural voices (to replace the AI voice)
 

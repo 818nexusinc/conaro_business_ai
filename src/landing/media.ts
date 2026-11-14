@@ -97,12 +97,12 @@ const HERO_CLIPS: Credit[] = [
   { title: "Man answering a whatsapp", author: "Mixkit", license: "Mixkit Stock Video Free License", source: "https://mixkit.co/free-stock-video/man-answering-a-whatsapp-41165/", changes: TRIMMED },
 ];
 
-/** Explainer narration: AI voices made with Piper (open-source text-to-speech) from models trained on these recordings. */
+/** Explainer narration: natural AI voices made with Kokoro (open-weight text-to-speech, Apache 2.0). */
 const VOICES: Credit[] = [
-  { title: "Narration voice (English): Piper en_US-ljspeech-high, trained on the LJ Speech Dataset", author: "Keith Ito and Linda Johnson; Piper voice by the Rhasspy project", license: "Public domain (dataset); MIT (Piper)",
-    source: "https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/high", changes: { en: "used to generate the English explainer audio", fr: "utilisée pour produire l'audio des présentations en anglais" } },
-  { title: "Narration voice (French): Piper fr_FR-siwis-medium, trained on the SIWIS French Speech Synthesis Database", author: "Junichi Yamagishi, Pierre-Edouard Honnet et al. (University of Edinburgh, Idiap); Piper voice by the Rhasspy project", license: "CC BY 4.0 (dataset); MIT (Piper)",
-    source: "https://datashare.ed.ac.uk/handle/10283/2353", changes: { en: "used to generate the French explainer audio", fr: "utilisée pour produire l'audio des présentations en français" } },
+  { title: "Narration voices: Kokoro-82M v1.0 (English \"af_heart\", French \"ff_siwis\")", author: "hexgrad and contributors", license: "Apache 2.0 (model)",
+    source: "https://huggingface.co/hexgrad/Kokoro-82M", changes: { en: "used to generate the explainer audio", fr: "utilisé pour produire l'audio des présentations" } },
+  { title: "SIWIS French Speech Synthesis Database (basis of the French voice)", author: "Junichi Yamagishi, Pierre-Edouard Honnet et al. (University of Edinburgh, Idiap)", license: "CC BY 4.0",
+    source: "https://datashare.ed.ac.uk/handle/10283/2353", changes: { en: "used through the Kokoro French voice", fr: "utilisée par la voix française de Kokoro" } },
 ];
 
 export const CREDITS: Credit[] = [...HERO_CLIPS, ...Object.values(SOURCES), ...VOICES];

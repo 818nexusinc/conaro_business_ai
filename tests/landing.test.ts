@@ -83,7 +83,7 @@ describe("photos and video", () => {
       expect(existsSync(new URL(`../public/audio/${lang}/${a.id}.mp3`, import.meta.url)), `${lang}/${a.id}`).toBe(true);
       expect(NARRATION[lang][a.id]?.length, `${lang}/${a.id} timings (run scripts/gen-narration.py)`).toBe(a.script[lang].length);
     }
-    for (const c of CREDITS) { expect(c.author).toBeTruthy(); expect(c.license).toMatch(/^(CC BY|CC0|Public domain|Mixkit Stock Video Free License$)/); expect(c.changes).toBeTruthy(); }
+    for (const c of CREDITS) { expect(c.author).toBeTruthy(); expect(c.license).toMatch(/^(CC BY|CC0|Public domain|Apache 2.0|Mixkit Stock Video Free License$)/); expect(c.changes).toBeTruthy(); }
   });
 });
 

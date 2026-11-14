@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """Recorded narration for the landing page's explainers (one per agent, English and French).
 
-Synthesises each script line with Piper (open-source neural text-to-speech, runs locally), joins the lines with
-short pauses, normalises loudness and writes:
+Synthesises each script line with Kokoro (open-weight neural text-to-speech, Apache 2.0, runs locally through
+kokoro-onnx) at a calm pace, joins the lines with short pauses, softens the top end, normalises loudness and writes:
   public/audio/<lang>/<agent>.mp3      mono MP3 the page plays
   src/landing/narration.ts             line start times (seconds) so captions follow the voice exactly
 
-Voices (licences checked on each model card, see docs/REFERENCE_CHECKS.md):
-  en  en_US-ljspeech-high   trained on LJ Speech (public domain)
-  fr  fr_FR-siwis-medium    trained on SIWIS (CC BY 4.0, credited on the page)
+Voices (licences checked on the model card, see docs/REFERENCE_CHECKS.md R67):
+  en  af_heart   Kokoro-82M v1.0 (trained only on permissive / non-copyrighted audio)
+  fr  ff_siwis   Kokoro-82M v1.0, built on SIWIS (CC BY 4.0, credited on the page)
 
-Usage: python3 scripts/gen-narration.py <piper-binary> <voices-dir>   (scripts read from docs/PRESENTER_SCRIPTS.md's source:
-the explainers are exported first with `npx tsx scripts/export-scripts.ts > /tmp/scripts.json`).
+Usage: <python with kokoro-onnx> scripts/gen-narration.py <kokoro-dir with model.onnx and voices.npz> /tmp/scripts.json
+(export the scripts first: `npx tsx scripts/export-scripts.ts > /tmp/scripts.json`).
 """
 import json, os, subprocess, sys, tempfile, wave
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-VOICES = {"en": "en_US-ljspeech-high.onnx", "fr": "fr_FR-siwis-medium.onnx"}
-PAUSE = 0.45  # seconds between lines
+VOICES = {"en": ("af_heart", "en-us"), "fr": ("ff_siwis", "fr-fr")}
+SPEED = 0.92   # a little slower than default: calm and easy to follow
+PAUSE = 0.6    # seconds between lines
 
 
 def duration(path):
@@ -25,7 +26,10 @@ def duration(path):
         return w.getnframes() / w.getframerate()
 
 
-def main(piper, voices_dir, scripts_json):
+def main(kokoro_dir, scripts_json):
+    import soundfile as sf
+    from kokoro_onnx import Kokoro
+    tts = Kokoro(os.path.join(kokoro_dir, "model.onnx"), os.path.join(kokoro_dir, "voices.npz"))
     scripts = json.load(open(scripts_json))
     timings = {"en": {}, "fr": {}}
     for lang, items in scripts.items():
@@ -36,8 +40,9 @@ def main(piper, voices_dir, scripts_json):
                 parts, starts, t = [], [], 0.0
                 for i, line in enumerate(item["lines"]):
                     wav = os.path.join(tmp, f"{i}.wav")
-                    subprocess.run([piper, "-m", os.path.join(voices_dir, VOICES[lang]), "-f", wav, "--length-scale", "1.03"],
-                                   input=line.encode(), check=True, capture_output=True)
+                    voice, code = VOICES[lang]
+                    samples, rate = tts.create(line, voice=voice, speed=SPEED, lang=code)
+                    sf.write(wav, samples, rate, subtype="PCM_16")
                     starts.append(round(t, 2)); parts.append(wav); t += duration(wav) + PAUSE
                 lst = os.path.join(tmp, "list.txt")
                 silence = os.path.join(tmp, "silence.wav")
@@ -47,7 +52,7 @@ def main(piper, voices_dir, scripts_json):
                     for p in parts: f.write(f"file '{p}'\nfile '{silence}'\n")
                 mp3 = os.path.join(out_dir, f"{item['key']}.mp3")
                 subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lst,
-                                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ac", "1", "-ar", "24000", "-c:a", "libmp3lame", "-b:a", "48k", mp3], check=True)
+                                "-af", "highshelf=f=7000:g=-3,lowshelf=f=180:g=1.5,loudnorm=I=-18:TP=-2:LRA=9", "-ac", "1", "-ar", "24000", "-c:a", "libmp3lame", "-b:a", "64k", mp3], check=True)
                 timings[lang][item["key"]] = starts
                 print(lang, item["key"], f"{t:.1f}s")
     with open(os.path.join(ROOT, "src", "landing", "narration.ts"), "w") as f:
@@ -57,4 +62,4 @@ def main(piper, voices_dir, scripts_json):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    main(*sys.argv[1:3])
