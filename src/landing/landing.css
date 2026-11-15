@@ -164,6 +164,34 @@ header.site { position: sticky; top: 0; z-index: 10; background: var(--surface);
 .js .tablist .agent-chip:not([hidden]):nth-child(2n) { animation-delay: .04s; } .js .tablist .agent-chip:not([hidden]):nth-child(3n) { animation-delay: .08s; }
 @keyframes chip-in { from { opacity: 0; transform: translateY(8px); } }
 .panels { display: grid; gap: 40px; min-width: 0; margin-top: 8px; }
+.agent-chip .chip-go { display: none; }
+@media (min-width: 1081px) {
+  #team .wrap { max-width: 1360px; }
+  .js .tabs { grid-template-columns: 340px minmax(0, 1fr); gap: 28px; align-items: stretch; }
+  .js .dept-bar { display: none; }
+  .js .tablist { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 24px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .js .tablist .agent-chip { min-height: 36px; padding: 3px 12px 3px 6px; gap: 10px; border: 0; border-radius: 12px; background: transparent; animation: none; }
+  .js .tablist .agent-chip img { width: 26px; height: 26px; box-shadow: none; }
+  .js .tablist .chip-name { flex: 1; font-size: .875rem; font-weight: 600; color: var(--muted); }
+  .js .tablist .agent-chip:hover { transform: none; box-shadow: none; background: var(--soft); }
+  .js .tablist .agent-chip:hover .chip-name { color: var(--text); }
+  .js .tablist .agent-chip[aria-selected="true"] { background: var(--d-soft); box-shadow: inset 3px 0 0 var(--d); }
+  .js .tablist .agent-chip[aria-selected="true"] .chip-name { color: var(--text); font-weight: 750; }
+  .js .tablist .agent-chip[aria-selected="true"] img { box-shadow: 0 0 0 2px var(--d); }
+  .js .tablist .agent-chip[aria-selected="true"]::after { display: none; }
+  .js .tablist .chip-go { display: block; width: 7px; height: 7px; border-top: 2px solid var(--d); border-right: 2px solid var(--d); transform: rotate(45deg); opacity: 0; transition: opacity .2s, transform .2s var(--ease); }
+  .js .tablist .agent-chip:hover .chip-go { opacity: .5; }
+  .js .tablist .agent-chip[aria-selected="true"] .chip-go { opacity: 1; transform: translateX(2px) rotate(45deg); }
+  .js .panels { margin-top: 0; }
+  .js .panel:not([hidden]), .js .panel:not([hidden]) .agent-card { height: 100%; }
+  .js .how-wide { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .js .how-wide h4 { margin-bottom: auto; padding-bottom: 22px; }
+  .js .how-wide .flow { margin-bottom: auto; }
+  /* Team headings inside the roster */
+  .js .tablist .agent-chip.first { margin-top: 28px; }
+  .js .tablist .agent-chip.first:first-child { margin-top: 24px; }
+  .js .tablist .agent-chip.first::before { content: attr(data-team); content: attr(data-team) / ""; position: absolute; display: block; top: -21px; left: 10px; font-size: .6875rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--d); white-space: nowrap; }
+}
 .js .panels { gap: 0; }
 .panel { min-width: 0; border-radius: 28px; }
 .js .panel:not([hidden]) .agent-card { animation: panel-in .55s var(--ease); }
@@ -184,20 +212,24 @@ header.site { position: sticky; top: 0; z-index: 10; background: var(--surface);
 .plan-chips .icon { width: 15px; height: 15px; }
 .start-link { min-width: 240px; }
 
-/* How it works: three wide step cards, joined by arrows */
-.how-wide { padding: 8px 36px 32px; }
-.how-wide h4 { font-family: var(--display); font-size: .8125rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 16px; display: flex; align-items: center; gap: 12px; }
-.how-wide h4::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; counter-reset: none; }
-.flow li { position: relative; display: grid; gap: 12px; align-content: start; padding: 22px 22px 24px; border-radius: 20px; background: var(--bg); border: 1px solid var(--line);
-  transition: transform .25s var(--ease), box-shadow .25s, border-color .25s; }
-.flow li:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: color-mix(in srgb, var(--d) 40%, var(--line)); }
-.flow li:not(:last-child)::after { content: ""; position: absolute; top: 50%; right: -19px; width: 10px; height: 10px; margin-top: -5px;
-  border-top: 2.5px solid var(--d); border-right: 2.5px solid var(--d); border-radius: 1px; transform: rotate(45deg); opacity: .75; }
-.flow-n { font-family: var(--display); font-weight: 800; font-size: 1.75rem; line-height: 1; letter-spacing: -.02em; color: var(--d); }
+/* How it works: a rail of numbered stops that draws itself when the agent opens */
+.how-wide { margin: 4px 36px 32px; padding: 26px 28px 30px; border-radius: 22px; background: var(--bg); border: 1px solid var(--line); }
+.how-wide h4 { font-family: var(--display); font-size: .8125rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 22px; }
+.flow { --node: 46px; position: relative; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+.flow::before { content: ""; position: absolute; top: calc(var(--node) / 2 - 1.5px); left: calc(100% / 6); right: calc(100% / 6); height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--d), color-mix(in srgb, var(--d) 35%, var(--line))); transform-origin: left center; }
+.flow li { position: relative; display: grid; justify-items: center; align-content: start; gap: 16px; padding: 0 16px; text-align: center; }
+.flow-n { position: relative; z-index: 1; display: grid; place-items: center; width: var(--node); height: var(--node); border-radius: 50%; background: var(--surface); border: 3px solid var(--d);
+  color: var(--d); font: 800 1.125rem/1 var(--display); box-shadow: 0 0 0 6px var(--bg); }
+.flow li:last-child .flow-n { background: var(--d); color: var(--surface); }
+.flow-body { display: grid; gap: 6px; max-width: 32ch; }
+.flow-step { font-size: .75rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--d); }
 .flow p { margin: 0; font-size: 1rem; line-height: 1.55; color: var(--text); max-width: none; }
+.js .panel:not([hidden]) .flow::before { animation: rail-x .8s var(--ease) both; }
 .js .panel:not([hidden]) .flow li { animation: step-in .5s var(--ease) both; }
-.js .panel:not([hidden]) .flow li:nth-child(2) { animation-delay: .08s; } .js .panel:not([hidden]) .flow li:nth-child(3) { animation-delay: .16s; }
+.js .panel:not([hidden]) .flow li:nth-child(2) { animation-delay: .22s; } .js .panel:not([hidden]) .flow li:nth-child(3) { animation-delay: .44s; }
+@keyframes rail-x { from { transform: scaleX(0); } }
+@keyframes rail-y { from { transform: scaleY(0); } }
 @keyframes step-in { from { opacity: 0; transform: translateY(10px); } }
 
 .agent-nav { display: none; margin-top: auto; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--line); background: var(--bg); }
@@ -342,12 +374,17 @@ details.faq p { margin: 10px 0 0; color: var(--muted); }
   .dept-pill { flex: none; }
   .js .tablist { display: flex; overflow-x: auto; padding: 2px 2px 10px; scroll-snap-type: x proximity; scrollbar-width: none; }
   .agent-chip { flex: none; width: 250px; scroll-snap-align: start; }
-  .agent-top { padding: 24px 20px; } .how-wide { padding: 4px 20px 24px; }
+  .agent-top { padding: 24px 20px; }
   /* Steps stack, joined by a line */
-  .flow { grid-template-columns: 1fr; gap: 14px; }
-  .flow li { grid-template-columns: 44px 1fr; align-items: start; padding: 16px 18px; }
-  .flow-n { font-size: 1.375rem; padding-top: 2px; }
-  .flow li:not(:last-child)::after { top: auto; bottom: -11px; right: auto; left: 36px; margin: 0; transform: rotate(135deg); }
+  .how-wide { margin: 0 16px 20px; padding: 22px 18px; }
+  .flow { --node: 40px; grid-template-columns: 1fr; gap: 22px; }
+  .flow::before { display: none; }
+  .flow li:not(:last-child)::before { content: ""; position: absolute; left: calc(var(--node) / 2 - 1.5px); top: calc(var(--node) + 6px); bottom: -16px; width: 3px; border-radius: 3px;
+    background: color-mix(in srgb, var(--d) 55%, var(--line)); transform-origin: center top; }
+  .js .panel:not([hidden]) .flow li:not(:last-child)::before { animation: rail-y .5s var(--ease) both; animation-delay: inherit; }
+  .flow li { grid-template-columns: var(--node) 1fr; justify-items: start; align-items: start; gap: 14px; padding: 0; text-align: left; }
+  .flow-n { font-size: 1rem; }
+  .flow-body { max-width: none; padding-top: 2px; }
   .timeline .progress { left: 15px; }
   .moment, .moment.flip { grid-template-columns: 1fr; gap: 20px; padding-left: 44px; }
   .moment::before { left: 15px; top: 24px; }
@@ -374,7 +411,6 @@ details.faq p { margin: 10px 0 0; color: var(--muted); }
   .nav-btn span { display: none; } .nav-btn { max-width: none; }
 }
 
-@media (min-width: 1081px) { .agent-card { min-height: 830px; } }
 
 /* ---------------------------------------------------------------- Reduced motion: everything still, nothing hidden */
 @media (prefers-reduced-motion: reduce) {

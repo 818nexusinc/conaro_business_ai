@@ -148,12 +148,18 @@
     var panels = tabs.map(function (t) { return document.getElementById(t.getAttribute("aria-controls")); });
     var pills = Array.prototype.slice.call(root.querySelectorAll("[data-dept]")).filter(function (el) { return el.classList.contains("dept-pill"); });
     // Show only the chosen team's agents (the pills are a filter; the agent chips are the tabs).
+    // On wide screens the pills are hidden and every agent shows in a roster grouped by team.
+    var list0 = tabs.length ? tabs[0].parentElement : null;
     function showDept(dept) {
+      var filtering = pills.length > 0 && pills[0].offsetParent !== null;
       pills.forEach(function (p) { p.setAttribute("aria-pressed", p.getAttribute("data-dept") === dept ? "true" : "false"); });
-      tabs.forEach(function (t) { t.hidden = pills.length > 0 && t.getAttribute("data-dept") !== dept; });
+      tabs.forEach(function (t) { t.hidden = filtering && t.getAttribute("data-dept") !== dept; });
+      if (list0) list0.setAttribute("aria-orientation", filtering ? "horizontal" : "vertical");
     }
+    var current = 0;
     function select(i, focus) {
       showDept(tabs[i].getAttribute("data-dept"));
+      current = i;
       tabs.forEach(function (t, k) {
         var on = k === i;
         t.setAttribute("aria-selected", on ? "true" : "false");
@@ -198,6 +204,11 @@
         });
       });
     });
+    if (window.matchMedia) {
+      var wide = window.matchMedia("(min-width: 1081px)");
+      var again = function () { showDept(tabs[current].getAttribute("data-dept")); };
+      if (wide.addEventListener) wide.addEventListener("change", again); else if (wide.addListener) wide.addListener(again);
+    }
     var fromHash = panels.findIndex(function (p) { return p && "#" + p.id === location.hash; });
     var initial = fromHash >= 0 ? fromHash : Math.max(0, tabs.findIndex(function (t) { return t.getAttribute("aria-selected") === "true"; }));
     select(initial, false);

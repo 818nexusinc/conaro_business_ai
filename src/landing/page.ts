@@ -131,7 +131,7 @@ function agentPanel(o: LandingOptions, a: AgentCopy, selected: boolean, i: numbe
     </div>
     <div class="how-wide">
       <h4>${c.howItWorks}</h4>
-      <ol class="flow">${a.how[o.lang].map((s, k) => html`<li><span class="flow-n" aria-hidden="true">${String(k + 1).padStart(2, "0")}</span><p>${T(o, `agent.${a.id}.how.${k + 1}`, s)}</p></li>`)}</ol>
+      <ol class="flow">${a.how[o.lang].map((s, k) => html`<li><span class="flow-n" aria-hidden="true">${k + 1}</span><div class="flow-body"><span class="flow-step" aria-hidden="true">${c.stepN(k + 1)}</span><p>${T(o, `agent.${a.id}.how.${k + 1}`, s)}</p></div></li>`)}</ol>
     </div>
     <footer class="agent-nav js-only">
       <button type="button" class="nav-btn" data-step="-1" aria-label="${c.prevAgent}: ${agentText(o, prev, "name")}">${svg(ICON.prev)}<span>${agentText(o, prev, "name")}</span></button>
@@ -191,7 +191,7 @@ export function landingPage(o: LandingOptions): string {
         ${depts.map((d) => html`<button type="button" class="dept-pill dept-${d}" data-dept="${d}" aria-pressed="${d === "front" ? "true" : "false"}">${svg(ICON[d])}<span>${DEPTS[d][o.lang]}</span><span class="n" aria-hidden="true">${AGENT_COPY.filter((a) => a.dept === d).length}</span></button>`)}
       </div></div>
       <div class="tablist" role="tablist" aria-label="${c.tabsLabel}" aria-orientation="horizontal">
-        ${ordered.map((a) => html`<a role="tab" class="agent-chip dept-${a.dept}" data-dept="${a.dept}" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}"><img src="${photoFor(o, `photo.agent.${a.id}`, AGENT_PHOTO[a.id]!).src ?? `/media/${AGENT_PHOTO[a.id]!.file}-thumb.jpg`}" width="44" height="44" alt="" loading="lazy" decoding="async"><span class="chip-name">${agentText(o, a, "name")}</span></a>`)}
+        ${ordered.map((a, i) => html`<a role="tab" class="agent-chip dept-${a.dept}${i === 0 || ordered[i - 1]!.dept !== a.dept ? " first" : ""}" data-dept="${a.dept}" data-team="${DEPTS[a.dept][o.lang]}" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}"><img src="${photoFor(o, `photo.agent.${a.id}`, AGENT_PHOTO[a.id]!).src ?? `/media/${AGENT_PHOTO[a.id]!.file}-thumb.jpg`}" width="44" height="44" alt="" loading="lazy" decoding="async"><span class="chip-name">${agentText(o, a, "name")}</span><span class="chip-go" aria-hidden="true"></span></a>`)}
       </div>
       <div class="panels">${ordered.map((a, i) => agentPanel(o, a, a.id === "customer-service", i, ordered))}</div>
     </div>
