@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createContainer, type Container } from "./container.ts";
 import { createPortalHandler, type RequestListener } from "./portal/server.ts";
 import { runLockedCycle } from "./cycle-lock.ts";
+import { runPlatformAgentsIfDue } from "./platform/agents.ts";
+import { platformContext } from "./portal/server.ts";
 
 export interface App { handler: RequestListener; container: Container | null; cycle: (() => ReturnType<typeof runLockedCycle>) | null }
 
@@ -26,7 +28,14 @@ export async function createApp(): Promise<App> {
     return { handler: problemHandler((err as Error).message), container: null, cycle: null };
   }
   const hosted = Boolean(c.env.PORT || c.env.VERCEL);
-  const cycle = () => runLockedCycle(c.db, c.app.deps, c.marketplace ? { marketplace: c.marketplace } : {});
+  const billing = c.env.STRIPE_SECRET_KEY ? { secretKey: c.env.STRIPE_SECRET_KEY, webhookSecret: c.env.STRIPE_WEBHOOK_SECRET, liveApprovedBy: c.env.BAI_STRIPE_LIVE_APPROVED_BY } : undefined;
+  const cycle = async () => {
+    const r = await runLockedCycle(c.db, c.app.deps, c.marketplace ? { marketplace: c.marketplace } : {});
+    // The platform's own agents: once a day, after the businesses' cycle. Their failure never fails the cycle.
+    if (r.ran) await runPlatformAgentsIfDue(c.db, c.app.deps.reasoning, platformContext({ setupKey: c.env.BAI_SETUP_KEY, billing, landing: { frReviewedBy: c.env.BAI_FR_REVIEWED_BY } }))
+      .catch((err) => console.error("[platform agents]", (err as Error).message));
+    return r;
+  };
   const handler = createPortalHandler({
     db: c.db, app: c.app, linkSecret: c.env.BAI_UNSUBSCRIBE_SECRET,
     secure: c.env.BAI_PUBLIC_URL.startsWith("https://"), trustProxy: hosted,
@@ -34,7 +43,7 @@ export async function createApp(): Promise<App> {
     ...(c.env.BAI_BOS_LINK_SECRET ? { bosLinkSecret: c.env.BAI_BOS_LINK_SECRET } : {}),
     ...(c.env.CRON_SECRET ? { cron: { secret: c.env.CRON_SECRET, run: cycle } } : {}),
     ...(c.env.BAI_SETUP_KEY ? { setupKey: c.env.BAI_SETUP_KEY } : {}),
-    ...(c.env.STRIPE_SECRET_KEY ? { billing: { secretKey: c.env.STRIPE_SECRET_KEY, webhookSecret: c.env.STRIPE_WEBHOOK_SECRET, liveApprovedBy: c.env.BAI_STRIPE_LIVE_APPROVED_BY } } : {}),
+    ...(billing ? { billing } : {}),
     publicUrl: c.env.BAI_PUBLIC_URL,
     landing: { signupOpen: c.env.BAI_SIGNUP === "open", ...(c.env.BAI_PRESENTER_VIDEO_BASE ? { videoBase: c.env.BAI_PRESENTER_VIDEO_BASE } : {}),
       ...(c.env.BAI_PRESENTER_AUDIO_BASE ? { audioBase: c.env.BAI_PRESENTER_AUDIO_BASE } : {}), ...(c.env.BAI_FR_REVIEWED_BY ? { frReviewedBy: c.env.BAI_FR_REVIEWED_BY } : {}) },

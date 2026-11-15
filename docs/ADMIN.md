@@ -37,3 +37,16 @@ Storage: `bai_site_content` (draft and published value per key and language), `b
 4. A business owner then sees **Subscribe with a card** on *Plan and usage* (Stripe Checkout; test card 4242 4242 4242 4242) and, once subscribed, **Manage billing in Stripe** (customer portal). Webhooks update the subscription and billing status.
 
 Real charging is off: live keys and live events are refused until the owner sets `BAI_STRIPE_LIVE_APPROVED_BY` (their name) and switches to live keys. Evidence: `docs/REFERENCE_CHECKS.md` R68–R71.
+
+## Businesses
+
+`/admin/businesses` lists every workspace (name, industry, plan, subscription and billing status, whether its agents run). Owners can **Pause agents** / **Resume agents** for a business in an emergency (recorded in both audit logs). A business's own records (customers, jobs, money) are not shown here.
+
+## Admin agents (the platform's own workforce)
+
+`/admin/agents`: eight agents that work for CONARO Business AI itself — Platform Manager (daily briefing and priorities), Growth and Marketing Director, Pricing Analyst, Sales and Onboarding Lead, Customer Success Manager, Finance Controller, Compliance and Security Officer, Website Quality Lead. They run once a day after the businesses' scheduled cycle (and on **Run all agents now**).
+
+- **Data:** platform aggregates only (counts, plan and industry ids). No business names, people, emails or messages reach them; the marketing agent has no personal data. Model input goes through `wrapUntrusted()`; without `ANTHROPIC_API_KEY` the AI copy suggestions are skipped and marked "AI not configured".
+- **Output:** findings labelled ACTUAL (from records) or ESTIMATE (e.g. recurring revenue from published prices), and proposals in an approval queue. A proposal whose reason has gone away is withdrawn ("expired") on the next run.
+- **Decisions (owners):** approving a *website wording* or *plan change* saves a **draft** (you still publish it); a *message draft* is never sent — a person copies it and sends it to the right businesses; a *task* is acknowledged. AI-drafted copy is rejected if it contains invented figures or promises, and may only change the hero and team headlines.
+- They never send messages, post, spend, charge or change anything outside the drafts above (project hard limits).

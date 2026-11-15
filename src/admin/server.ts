@@ -201,7 +201,7 @@ export function adminRoutes(db: Db, h: AdminHttp) {
     }
     if (path === "/admin/audit") { page(res, 200, A.auditPage(ctx(flash, error), await db.query("select occurred_at, actor, action, subject, detail from bai_admin_audit order by id desc limit 300"))); return true; }
     for (const x of h.extra ?? []) if (await x({ req, res, path, method, url, session }, tools)) return true;
-    if (["/admin/plans", "/admin/billing", "/admin/businesses", "/admin/agents"].includes(path)) {
+    if (["/admin/plans", "/admin/billing", "/admin/agents"].includes(path)) {
       page(res, 200, A.placeholderPage(ctx(flash, error), path.slice(7).replace(/^\w/, (c) => c.toUpperCase()), "This section is being built."));
       return true;
     }

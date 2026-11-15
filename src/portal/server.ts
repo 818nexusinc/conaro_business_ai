@@ -60,6 +60,9 @@ import { publishedContent } from "../admin/content.ts";
 import { plansAdmin } from "../admin/plans-admin.ts";
 import { publishedPlans } from "../admin/plans.ts";
 import { billingAdmin } from "../admin/billing-admin.ts";
+import { agentsAdmin } from "../admin/agents-admin.ts";
+import { businessesAdmin } from "../admin/businesses-admin.ts";
+import type { PlatformContext } from "../platform/agents.ts";
 import { applyStripeEvent, billingAccount } from "../billing/service.ts";
 import { billingProblem, keyMode, stripeClient, verifyWebhook, type Fetch, type StripeConfig } from "../billing/stripe.ts";
 
@@ -145,6 +148,15 @@ const PAGE_PERMS: Record<string, Permission> = { "/chat": "chat", "/finance": "f
 
 export type RequestListener = (req: IncomingMessage, res: ServerResponse) => void;
 
+/** What the platform's own agents may know about this deployment's configuration (no secret values). */
+export function platformContext(o: { setupKey?: string | undefined; billing?: StripeConfig | undefined; landing?: { frReviewedBy?: string | undefined } | undefined }): PlatformContext {
+  return {
+    setupKeySet: Boolean(o.setupKey), frReviewed: Boolean(o.landing?.frReviewedBy),
+    billingProblem: billingProblem(o.billing), billingMode: o.billing ? keyMode(o.billing.secretKey) : null,
+    webhookConfigured: Boolean(o.billing?.webhookSecret), liveApproved: Boolean(o.billing?.liveApprovedBy),
+  };
+}
+
 export function createPortalServer(opts: PortalOptions): Server {
   return createServer(createPortalHandler(opts));
 }
@@ -178,7 +190,7 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
     send: (res, status, body, type = "text/html; charset=utf-8") => { res.statusCode = status; res.setHeader("Content-Type", type); res.end(body); },
     redirect, readForm, readRaw, cookie, addCookie, ip, secure, setupKey: opts.setupKey,
     editorPage: async (lang, content, editing) => landingPage({ lang, ...landingBase(), content, editing, plans: await publishedPlans(db) }),
-    extra: [plansAdmin(db), billingAdmin(db, { config: opts.billing, publicUrl: opts.publicUrl })],
+    extra: [plansAdmin(db), billingAdmin(db, { config: opts.billing, publicUrl: opts.publicUrl }), agentsAdmin(db, deps.reasoning, () => platformContext(opts)), businessesAdmin(db)],
   });
 
   const ACTIONS: Record<string, Action> = {
