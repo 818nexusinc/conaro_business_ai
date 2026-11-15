@@ -55,6 +55,8 @@ import { captionsVtt, findExplainer } from "../landing/presenters.ts";
 import { langCookie, resolveLang, type Lang } from "../i18n.ts";
 import { currentLang, runInLang, translateHtml, translatePlain } from "./i18n.ts";
 import { signUp } from "../landing/signup.ts";
+import { adminRoutes } from "../admin/server.ts";
+import { publishedContent } from "../admin/content.ts";
 
 const MANROPE = Buffer.from(MANROPE_WOFF2_BASE64, "base64");
 const COOKIE = "bai_session";
@@ -147,13 +149,24 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
   const mediaOrigins = [opts.landing?.videoBase, opts.landing?.audioBase].filter((u): u is string => Boolean(u)).map((u) => new URL(u).origin);
   const media = [...new Set(mediaOrigins)].map((o) => ` ${o}`).join("");
   const LANDING_CSP = `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'${media}; media-src 'self'${media}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
-  const sendLanding = (res: ServerResponse, lang: Lang, status: number, values: Record<string, string>, error?: string, plan?: string) => {
+  const landingBase = () => ({ signupOpen: Boolean(opts.landing?.signupOpen), videoBase: opts.landing?.videoBase, audioBase: opts.landing?.audioBase, frReviewedBy: opts.landing?.frReviewedBy });
+  const sendLanding = async (res: ServerResponse, lang: Lang, status: number, values: Record<string, string>, error?: string, plan?: string) => {
+    const content = await publishedContent(db, lang);
     res.setHeader("Content-Security-Policy", LANDING_CSP);
     res.setHeader("Content-Language", lang === "fr" ? "fr-CA" : "en-CA");
     res.setHeader("Vary", "Cookie, Accept-Language");
-    return send(res, status, landingPage({ lang, signupOpen: Boolean(opts.landing?.signupOpen), videoBase: opts.landing?.videoBase, audioBase: opts.landing?.audioBase,
-      frReviewedBy: opts.landing?.frReviewedBy, values, error, plan }), "text/html; charset=utf-8", false);
+    return send(res, status, landingPage({ lang, ...landingBase(), values, error, plan, content }), "text/html; charset=utf-8", false);
   };
+  const readRaw = async (req: IncomingMessage, max: number): Promise<Buffer> => {
+    let size = 0; const chunks: Buffer[] = [];
+    for await (const c of req) { size += (c as Buffer).length; if (size > max) throw new HttpError(413, "Upload too large"); chunks.push(c as Buffer); }
+    return Buffer.concat(chunks);
+  };
+  const admin = adminRoutes(db, {
+    send: (res, status, body, type = "text/html; charset=utf-8") => { res.statusCode = status; res.setHeader("Content-Type", type); res.end(body); },
+    redirect, readForm, readRaw, cookie, addCookie, ip, secure, setupKey: opts.setupKey,
+    editorPage: async (lang, content, editing) => landingPage({ lang, ...landingBase(), content, editing }),
+  });
 
   const ACTIONS: Record<string, Action> = {
     "/do/pause": { perm: "pause", back: "/", run: async (f, s, t) => { await setPaused(t, true, f.get("reason")?.slice(0, 200) || "paused", `user:${s.userId}`); return "All agents are paused."; } },
@@ -299,6 +312,7 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
         return res.end(method === "HEAD" ? undefined : body);
       } catch { return send(res, 404, "Not found", "text/plain"); }
     }
+    if (await admin(req, res, path, method, url)) return;
     if (path === "/static/app.css" && method === "GET") { res.setHeader("Cache-Control", "public, max-age=3600"); return send(res, 200, CSS, "text/css; charset=utf-8"); }
     if (path === "/healthz") return send(res, 200, JSON.stringify({ ok: true }), "application/json");
 

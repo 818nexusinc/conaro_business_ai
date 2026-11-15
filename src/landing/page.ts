@@ -22,6 +22,38 @@ export interface LandingOptions {
   plan?: string | undefined;
   error?: string | undefined;
   values?: Record<string, string> | undefined;
+  /** Published (or, in the editor, draft) overrides of the built-in text for this language: key → text. */
+  content?: Record<string, string> | undefined;
+  /** Admin editor: marks every editable text and image, and loads the editor's toolbar. */
+  editing?: { csrf: string; pending: number; canPublish: boolean } | undefined;
+  /** Published plan prices and names (admin-managed); without them the built-in catalogue is used. */
+  plans?: Record<string, { priceCents: number | null; name?: Partial<Record<Lang, string>>; features?: Partial<Record<Lang, string[]>> }> | undefined;
+}
+
+/** Text that the admin may override. In the editor it is wrapped so it can be clicked and edited in place. */
+function T(o: LandingOptions, key: string, fallback: string): Html {
+  const v = o.content?.[key] ?? fallback;
+  return o.editing ? html`<span class="ed" data-edit="${key}">${v}</span>` : html`${v}`;
+}
+/** The same override as plain text (for attributes, labels repeated elsewhere). */
+const S = (o: LandingOptions, key: string, fallback: string): string => o.content?.[key] ?? fallback;
+/** A photo the admin may replace with an uploaded image ("u:<id>" served from the database). */
+function photoFor(o: LandingOptions, key: string, p: Photo): Photo & { key: string; src?: string } {
+  const v = o.content?.[key];
+  return v && /^u:[0-9a-f-]{36}$/.test(v) ? { ...p, src: `/media/u/${v.slice(2)}`, key } : { ...p, key };
+}
+const agentText = (o: LandingOptions, a: AgentCopy, field: "name" | "summary") => S(o, `agent.${a.id}.${field}`, a[field][o.lang]);
+const SECTIONS = ["team", "day", "plans", "faq"] as const;
+type SectionId = (typeof SECTIONS)[number];
+/** Section order and visibility (admin "layout" setting); unknown or missing sections fall back to the default. */
+export function layoutOf(raw: string | undefined): { order: SectionId[]; hidden: SectionId[] } {
+  try {
+    const l = raw ? JSON.parse(raw) as { order?: unknown; hidden?: unknown } : {};
+    const order = (Array.isArray(l.order) ? l.order : []).filter((x): x is SectionId => SECTIONS.includes(x as SectionId));
+    for (const id of SECTIONS) if (!order.includes(id)) order.push(id);
+    const hidden = (Array.isArray(l.hidden) ? l.hidden : []).filter((x): x is SectionId => SECTIONS.includes(x as SectionId));
+    return { order: [...new Set(order)], hidden };
+  } catch { return { order: [...SECTIONS], hidden: [] }; }
 }
 
 const svg = (path: string) => html`<svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
@@ -36,9 +68,12 @@ const planName = (lang: Lang, p: Plan) => (lang === "fr" ? PLAN_NAME_FR[p.id] ??
 const agentName = (lang: Lang, id: string) => AGENT_COPY.find((a) => a.id === id)?.name[lang] ?? agentDef(id).name.replace(/^AI /, "");
 
 /** A responsive photo: 640 and 1280 px versions (JPEG, served from /media), lazy unless it is above the fold. */
-function img(p: Photo, lang: Lang, cls = "", eager = false): Html {
+function img(p: Photo & { src?: string; key?: string }, lang: Lang, cls = "", eager = false, editing = false): Html {
+  const media = editing && p.key ? html` data-edit-media="${p.key}"` : "";
+  const lazy = eager ? html` fetchpriority="high"` : html` loading="lazy" decoding="async"`;
+  if (p.src) return html`<img class="${cls}" src="${p.src}" width="${p.w}" height="${p.h}" alt="${p.alt[lang]}"${lazy}${media}>`;
   return html`<img class="${cls}" src="/media/${p.file}-1280.jpg" srcset="/media/${p.file}-640.jpg 640w, /media/${p.file}-1280.jpg 1280w" sizes="(min-width: 900px) 50vw, 100vw"
-    width="${p.w}" height="${p.h}" alt="${p.alt[lang]}"${eager ? html` fetchpriority="high"` : html` loading="lazy" decoding="async"`}>`;
+    width="${p.w}" height="${p.h}" alt="${p.alt[lang]}"${lazy}${media}>`;
 }
 
 /**
@@ -46,7 +81,7 @@ function img(p: Photo, lang: Lang, cls = "", eager = false): Html {
  * (recorded narration if present, else the device's most natural voice, chosen by /static/landing.js) with
  * live captions. Without JavaScript the full script is shown.
  */
-function player(o: LandingOptions, key: string, name: string, lines: string[], photo: Photo, cls = "", badge?: Html): Html {
+function player(o: LandingOptions, key: string, name: string, lines: string[], photo: Photo & { src?: string; key?: string }, cls = "", badge?: Html): Html {
   const c = COPY[o.lang].player;
   const vb = o.videoBase?.replace(/\/$/, "");
   // Recorded narration: the configured folder, else the AI-voice files that ship with the site (public/audio).
@@ -56,7 +91,7 @@ function player(o: LandingOptions, key: string, name: string, lines: string[], p
     ? html`<video class="video" controls preload="none" playsinline poster="${vb}/${o.lang}/${key}.jpg" aria-label="${name}">
         <source src="${vb}/${o.lang}/${key}.mp4" type="video/mp4"><track kind="captions" srclang="${o.lang}" label="${o.lang === "fr" ? "Français" : "English"}" src="/captions/${o.lang}/${key}.vtt" default></video>`
     : html`<div class="stage" data-stage>
-        ${img(photo, o.lang, "stage-photo")}
+        ${img(photo, o.lang, "stage-photo", false, Boolean(o.editing))}
         ${badge ?? ""}
         <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
         <span class="big-play js-only" data-play-overlay aria-hidden="true">${svg(ICON.play)}</span>
@@ -82,14 +117,14 @@ function agentPanel(o: LandingOptions, a: AgentCopy, selected: boolean, i: numbe
   return html`<section class="panel dept-${a.dept}" role="tabpanel" id="agent-${a.id}" aria-labelledby="tab-${a.id}" tabindex="0"${selected ? "" : html` data-unselected`}>
   <div class="agent-card">
     <header class="agent-head">
-      <h3>${a.name[o.lang]}</h3>
-      <p class="summary">${a.summary[o.lang]}</p>
+      <h3>${T(o, `agent.${a.id}.name`, a.name[o.lang])}</h3>
+      <p class="summary">${T(o, `agent.${a.id}.summary`, a.summary[o.lang])}</p>
     </header>
     <div class="agent-body">
-      ${player(o, a.id, a.name[o.lang], a.script[o.lang], AGENT_PHOTO[a.id]!, "", badge)}
+      ${player(o, a.id, agentText(o, a, "name"), a.script[o.lang], photoFor(o, `photo.agent.${a.id}`, AGENT_PHOTO[a.id]!), "", badge)}
       <div class="agent-side">
         <h4>${c.howItWorks}</h4>
-        <ol class="stepper">${a.how[o.lang].map((s) => html`<li>${s}</li>`)}</ol>
+        <ol class="stepper">${a.how[o.lang].map((s, k) => html`<li>${T(o, `agent.${a.id}.how.${k + 1}`, s)}</li>`)}</ol>
         <div class="agent-plans">
           <p class="label">${c.plansIncluding}</p>
           <ul class="plan-chips">${PLANS.map((p) => included.includes(p) ? html`<li class="on">${svg(ICON.check)}${planName(o.lang, p)}</li>` : "")}</ul>
@@ -98,9 +133,9 @@ function agentPanel(o: LandingOptions, a: AgentCopy, selected: boolean, i: numbe
       </div>
     </div>
     <footer class="agent-nav js-only">
-      <button type="button" class="nav-btn" data-step="-1" aria-label="${c.prevAgent}: ${prev.name[o.lang]}">${svg(ICON.prev)}<span>${prev.name[o.lang]}</span></button>
+      <button type="button" class="nav-btn" data-step="-1" aria-label="${c.prevAgent}: ${agentText(o, prev, "name")}">${svg(ICON.prev)}<span>${agentText(o, prev, "name")}</span></button>
       <span class="count">${c.ofAgents(i + 1, all.length)}</span>
-      <button type="button" class="nav-btn next" data-step="1" aria-label="${c.nextAgent}: ${next.name[o.lang]}"><span>${next.name[o.lang]}</span>${svg(ICON.arrow)}</button>
+      <button type="button" class="nav-btn next" data-step="1" aria-label="${c.nextAgent}: ${agentText(o, next, "name")}"><span>${agentText(o, next, "name")}</span>${svg(ICON.arrow)}</button>
     </footer>
   </div>
 </section>`;
@@ -136,8 +171,92 @@ export function landingPage(o: LandingOptions): string {
   const ordered = depts.flatMap((d) => AGENT_COPY.filter((a) => a.dept === d));
   const industry = (id: string, name: string) => (o.lang === "fr" ? INDUSTRY_FR[id] ?? name : name);
   const strip = html`${INDUSTRY_PACKS.map((p) => TRADE_PHOTO[p.id]
-    ? html`<li class="trade">${img(TRADE_PHOTO[p.id]!, o.lang)}<span>${industry(p.id, p.name)}</span></li>`
+    ? html`<li class="trade">${img(photoFor(o, `photo.trade.${p.id}`, TRADE_PHOTO[p.id]!), o.lang, "", false, Boolean(o.editing))}<span>${industry(p.id, p.name)}</span></li>`
     : html`<li class="trade text"><span>${industry(p.id, p.name)}</span></li>`)}`;
+  const layout = layoutOf(o.content?.["layout"]);
+  const blocks: Record<SectionId, Html> = {
+    team: html`<section id="team" class="section" data-section="team" aria-labelledby="team-title">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="eyebrow">${T(o, "team.eyebrow", c.teamEyebrow)}</p>
+      <h2 id="team-title">${T(o, "team.title", c.teamTitle)}</h2>
+      <p class="lead dark">${T(o, "team.lead", c.teamLead)}</p>
+    </div>
+    <div class="tabs" data-tabs data-reveal>
+      <div class="dept-bar js-only" role="group" aria-label="${c.deptsLabel}">
+        ${depts.map((d) => html`<button type="button" class="dept-pill dept-${d}" data-dept="${d}" aria-pressed="${d === "front" ? "true" : "false"}">${svg(ICON[d])}<span>${DEPTS[d][o.lang]}</span><span class="n" aria-hidden="true">${AGENT_COPY.filter((a) => a.dept === d).length}</span></button>`)}
+      </div>
+      <div class="tablist" role="tablist" aria-label="${c.tabsLabel}" aria-orientation="horizontal">
+        ${ordered.map((a) => html`<a role="tab" class="agent-chip dept-${a.dept}" data-dept="${a.dept}" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}"><img src="${photoFor(o, `photo.agent.${a.id}`, AGENT_PHOTO[a.id]!).src ?? `/media/${AGENT_PHOTO[a.id]!.file}-thumb.jpg`}" width="40" height="40" alt="" loading="lazy" decoding="async"><span>${agentText(o, a, "name")}</span></a>`)}
+      </div>
+      <div class="panels">${ordered.map((a, i) => agentPanel(o, a, a.id === "customer-service", i, ordered))}</div>
+    </div>
+  </div>
+</section>`,
+    day: html`<section id="day" class="section day" data-section="day" aria-labelledby="day-title">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="eyebrow">${T(o, "day.eyebrow", c.dayEyebrow)}</p>
+      <h2 id="day-title">${T(o, "day.title", c.dayTitle)}</h2>
+      <p class="lead dark">${T(o, "day.lead", c.dayLead)}</p>
+    </div>
+    <ol class="timeline" data-timeline>
+      <li class="progress" aria-hidden="true"><span data-progress></span></li>
+      ${c.day.map(([time, title, text, who, level], i) => html`<li class="moment${i % 2 ? " flip" : ""}" data-reveal>
+        <figure class="moment-photo" data-parallax>${img(photoFor(o, `photo.day.${i + 1}`, DAY_PHOTOS[i]!), o.lang, "", false, Boolean(o.editing))}</figure>
+        <div class="moment-text">
+          <p class="time"><time>${T(o, `day.${i + 1}.time`, time)}</time></p>
+          <h3>${T(o, `day.${i + 1}.title`, title)}</h3>
+          <p>${T(o, `day.${i + 1}.text`, text)}</p>
+          <p class="who"><span class="by">${who}</span><span class="level ${level}">${svg(ICON[level])}${c.levels[level]}</span></p>
+        </div>
+      </li>`)}
+    </ol>
+    <div class="ok-note" data-reveal>${svg(ICON.ok)}<div><p><b>${c.levels.ok}.</b> ${T(o, "day.ok", c.okNote)}</p><p class="small">${T(o, "day.pilot", c.pilotNote)}</p></div></div>
+  </div>
+</section>`,
+    plans: html`<section id="plans" class="section band-soft" data-section="plans" aria-labelledby="plans-title">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="eyebrow">${T(o, "plans.eyebrow", c.plansEyebrow)}</p>
+      <h2 id="plans-title">${T(o, "plans.title", c.plansTitle)}</h2>
+    </div>
+    <div class="plans">${PLANS.map((p) => planCard(o, p, open && p.id === selected))}</div>
+    <p class="fine center">${T(o, "plans.fine", c.plansFine)}</p>
+
+    <div id="start" class="start${open ? " open" : ""}" data-start role="region" aria-labelledby="start-title">
+      <div class="start-inner">
+        <div class="start-copy">
+          <h2 id="start-title">${T(o, "start.title", c.startTitle)}</h2>
+          <ul class="ticks">${c.startTicks.map((t, k) => html`<li>${svg(ICON.check)}<span>${T(o, `start.tick.${k + 1}`, t)}</span></li>`)}</ul>
+        </div>
+        ${o.signupOpen ? html`<form class="signup" method="post" action="/signup?lang=${o.lang}#start" novalidate>
+          ${error ? html`<p class="form-error" role="alert">${error}</p>` : ""}
+          <input type="hidden" name="lang" value="${o.lang}">
+          <fieldset class="plan-pick"><legend>${c.form.plan}</legend>${PLANS.map((p) => html`<label class="pick"><input type="radio" name="plan" value="${p.id}"${p.id === selected ? html` checked` : ""}><span>${planName(o.lang, p)}</span></label>`)}</fieldset>
+          <label>${c.form.business}<input name="business" required maxlength="120" autocomplete="organization" value="${v.business ?? ""}"></label>
+          <label>${c.form.industry}<select name="industry" required>${INDUSTRY_PACKS.map((p) => html`<option value="${p.id}"${v.industry === p.id ? html` selected` : ""}>${industry(p.id, p.name)}</option>`)}</select></label>
+          <label>${c.form.name}<input name="name" required maxlength="120" autocomplete="name" value="${v.name ?? ""}"></label>
+          <label>${c.form.email}<input name="email" type="email" required autocomplete="email" value="${v.email ?? ""}"></label>
+          <label>${c.form.password} <span class="hint">${c.form.passwordHint}</span><input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+          <label class="hp" aria-hidden="true">${c.form.website}<input name="website" tabindex="-1" autocomplete="off"></label>
+          <label class="check"><input type="checkbox" name="pilot" value="yes" required${v.pilot === "yes" ? html` checked` : ""}><span>${c.form.pilot}</span></label>
+          <label class="check"><input type="checkbox" name="marketing" value="yes"${v.marketing === "yes" ? html` checked` : ""}><span>${o.lang === "fr" ? MARKETING_CONSENT_WORDING_FR : MARKETING_CONSENT_WORDING} <span class="hint">${c.form.optional}</span></span></label>
+          <button class="btn primary wide" type="submit">${c.form.submit}</button>
+        </form>` : html`<div class="signup closed"><h3>${c.closedTitle}</h3><p>${c.closedText} <a href="/login">${c.closedLink}</a>.</p></div>`}
+      </div>
+    </div>
+  </div>
+</section>`,
+    faq: html`<section id="faq" class="section" data-section="faq" aria-labelledby="faq-title">
+  <div class="wrap narrow" data-reveal>
+    <h2 id="faq-title">${T(o, "faq.title", c.faqTitle)}</h2>
+    ${c.faq.map(([q, a], k) => html`<details class="faq"${o.editing ? html` open` : ""}><summary>${T(o, `faq.${k + 1}.q`, q)}</summary><p>${T(o, `faq.${k + 1}.a`, a)}</p></details>`)}
+  </div>
+</section>`,
+  };
+  // In the editor hidden sections stay visible (marked), so they can be shown again.
+  const sections = layout.order.filter((id) => o.editing || !layout.hidden.includes(id)).map((id) => o.editing && layout.hidden.includes(id) ? html`<div class="ed-hidden-section">${blocks[id]}</div>` : blocks[id]);
   return html`<!doctype html>
 <html lang="${HTML_LANG[o.lang]}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${c.title}</title><meta name="description" content="${c.description}">
@@ -145,7 +264,9 @@ export function landingPage(o: LandingOptions): string {
 <meta name="theme-color" content="#172D46"><link rel="stylesheet" href="/static/landing.css"><link rel="preload" href="/static/manrope.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" as="image" href="/media/${HERO_VIDEO.poster}">
 <script src="/static/landing.js" defer></script>
-</head><body>
+${o.editing ? html`<link rel="stylesheet" href="/admin/static/editor.css"><script src="/admin/static/editor.js" defer></script>` : ""}
+</head><body${o.editing ? html` class="editing"` : ""}>
+${o.editing ? html`<div id="ed-bar" data-csrf="${o.editing.csrf}" data-lang="${o.lang}" data-pending="${o.editing.pending}" data-can-publish="${o.editing.canPublish ? "1" : ""}"></div>` : ""}
 <a class="skip" href="#main">${c.skip}</a>
 ${o.lang === "fr" && !o.frReviewedBy ? html`<p class="review-note" role="note">${c.reviewNote}</p>` : ""}
 <header class="site" data-header>
@@ -165,106 +286,25 @@ ${o.lang === "fr" && !o.frReviewedBy ? html`<p class="review-note" role="note">$
   </div>
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="eyebrow">${c.eyebrow}</p>
-      <h1 id="hero-title"><span class="line">${c.h1.split(". ")[0]}.</span> <span class="line accent">${c.h1.split(". ").slice(1).join(". ")}</span></h1>
-      <p class="lead">${c.lead(AGENT_COPY.length)}</p>
-      <div class="cta-row"><a class="btn primary" href="#plans">${c.ctaPlans}${svg(ICON.arrow)}</a><a class="btn ghost" href="#team">${c.ctaMeet}</a></div>
+      <p class="eyebrow">${T(o, "hero.eyebrow", c.eyebrow)}</p>
+      <h1 id="hero-title"><span class="line">${T(o, "hero.title1", `${c.h1.split(". ")[0]}.`)}</span> <span class="line accent">${T(o, "hero.title2", c.h1.split(". ").slice(1).join(". "))}</span></h1>
+      <p class="lead">${T(o, "hero.lead", c.lead(AGENT_COPY.length))}</p>
+      <div class="cta-row"><a class="btn primary" href="#plans">${T(o, "hero.cta", c.ctaPlans)}${svg(ICON.arrow)}</a><a class="btn ghost" href="#team">${T(o, "hero.cta2", c.ctaMeet)}</a></div>
     </div>
     <div class="hero-card">
-      <p class="card-label">${c.heroListen}</p>
-      ${player(o, "business-manager", manager.name[o.lang], manager.script[o.lang], AGENT_PHOTO["business-manager"]!, "compact")}
+      <p class="card-label">${T(o, "hero.listen", c.heroListen)}</p>
+      ${player(o, "business-manager", agentText(o, manager, "name"), manager.script[o.lang], photoFor(o, "photo.agent.business-manager", AGENT_PHOTO["business-manager"]!), "compact")}
     </div>
   </div>
   <button type="button" class="video-toggle js-only" data-video-toggle data-label-pause="${c.videoPause}" data-label-play="${c.videoPlay}" aria-label="${c.videoPause}">${svg(ICON.pause)}</button>
   <div class="marquee" aria-label="${c.tradesLabel}" role="region"><ul class="marquee-track">${strip}</ul><ul class="marquee-track" aria-hidden="true">${strip}</ul></div>
 </section>
 
-<section id="team" class="section" aria-labelledby="team-title">
-  <div class="wrap">
-    <div class="section-head" data-reveal>
-      <p class="eyebrow">${c.teamEyebrow}</p>
-      <h2 id="team-title">${c.teamTitle}</h2>
-      <p class="lead dark">${c.teamLead}</p>
-    </div>
-    <div class="tabs" data-tabs data-reveal>
-      <div class="dept-bar js-only" role="group" aria-label="${c.deptsLabel}">
-        ${depts.map((d) => html`<button type="button" class="dept-pill dept-${d}" data-dept="${d}" aria-pressed="${d === "front" ? "true" : "false"}">${svg(ICON[d])}<span>${DEPTS[d][o.lang]}</span><span class="n" aria-hidden="true">${AGENT_COPY.filter((a) => a.dept === d).length}</span></button>`)}
-      </div>
-      <div class="tablist" role="tablist" aria-label="${c.tabsLabel}" aria-orientation="horizontal">
-        ${ordered.map((a) => html`<a role="tab" class="agent-chip dept-${a.dept}" data-dept="${a.dept}" id="tab-${a.id}" href="#agent-${a.id}" aria-controls="agent-${a.id}" aria-selected="${a.id === "customer-service" ? "true" : "false"}"><img src="/media/${AGENT_PHOTO[a.id]!.file}-thumb.jpg" width="40" height="40" alt="" loading="lazy" decoding="async"><span>${a.name[o.lang]}</span></a>`)}
-      </div>
-      <div class="panels">${ordered.map((a, i) => agentPanel(o, a, a.id === "customer-service", i, ordered))}</div>
-    </div>
-  </div>
-</section>
-
-<section id="day" class="section day" aria-labelledby="day-title">
-  <div class="wrap">
-    <div class="section-head" data-reveal>
-      <p class="eyebrow">${c.dayEyebrow}</p>
-      <h2 id="day-title">${c.dayTitle}</h2>
-      <p class="lead dark">${c.dayLead}</p>
-    </div>
-    <ol class="timeline" data-timeline>
-      <li class="progress" aria-hidden="true"><span data-progress></span></li>
-      ${c.day.map(([time, title, text, who, level], i) => html`<li class="moment${i % 2 ? " flip" : ""}" data-reveal>
-        <figure class="moment-photo" data-parallax>${img(DAY_PHOTOS[i]!, o.lang)}</figure>
-        <div class="moment-text">
-          <p class="time"><time>${time}</time></p>
-          <h3>${title}</h3>
-          <p>${text}</p>
-          <p class="who"><span class="by">${who}</span><span class="level ${level}">${svg(ICON[level])}${c.levels[level]}</span></p>
-        </div>
-      </li>`)}
-    </ol>
-    <div class="ok-note" data-reveal>${svg(ICON.ok)}<div><p><b>${c.levels.ok}.</b> ${c.okNote}</p><p class="small">${c.pilotNote}</p></div></div>
-  </div>
-</section>
-
-<section id="plans" class="section band-soft" aria-labelledby="plans-title">
-  <div class="wrap">
-    <div class="section-head" data-reveal>
-      <p class="eyebrow">${c.plansEyebrow}</p>
-      <h2 id="plans-title">${c.plansTitle}</h2>
-    </div>
-    <div class="plans">${PLANS.map((p) => planCard(o, p, open && p.id === selected))}</div>
-    <p class="fine center">${c.plansFine}</p>
-
-    <div id="start" class="start${open ? " open" : ""}" data-start role="region" aria-labelledby="start-title">
-      <div class="start-inner">
-        <div class="start-copy">
-          <h2 id="start-title">${c.startTitle}</h2>
-          <ul class="ticks">${c.startTicks.map((t) => html`<li>${svg(ICON.check)}<span>${t}</span></li>`)}</ul>
-        </div>
-        ${o.signupOpen ? html`<form class="signup" method="post" action="/signup?lang=${o.lang}#start" novalidate>
-          ${error ? html`<p class="form-error" role="alert">${error}</p>` : ""}
-          <input type="hidden" name="lang" value="${o.lang}">
-          <fieldset class="plan-pick"><legend>${c.form.plan}</legend>${PLANS.map((p) => html`<label class="pick"><input type="radio" name="plan" value="${p.id}"${p.id === selected ? html` checked` : ""}><span>${planName(o.lang, p)}</span></label>`)}</fieldset>
-          <label>${c.form.business}<input name="business" required maxlength="120" autocomplete="organization" value="${v.business ?? ""}"></label>
-          <label>${c.form.industry}<select name="industry" required>${INDUSTRY_PACKS.map((p) => html`<option value="${p.id}"${v.industry === p.id ? html` selected` : ""}>${industry(p.id, p.name)}</option>`)}</select></label>
-          <label>${c.form.name}<input name="name" required maxlength="120" autocomplete="name" value="${v.name ?? ""}"></label>
-          <label>${c.form.email}<input name="email" type="email" required autocomplete="email" value="${v.email ?? ""}"></label>
-          <label>${c.form.password} <span class="hint">${c.form.passwordHint}</span><input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
-          <label class="hp" aria-hidden="true">${c.form.website}<input name="website" tabindex="-1" autocomplete="off"></label>
-          <label class="check"><input type="checkbox" name="pilot" value="yes" required${v.pilot === "yes" ? html` checked` : ""}><span>${c.form.pilot}</span></label>
-          <label class="check"><input type="checkbox" name="marketing" value="yes"${v.marketing === "yes" ? html` checked` : ""}><span>${o.lang === "fr" ? MARKETING_CONSENT_WORDING_FR : MARKETING_CONSENT_WORDING} <span class="hint">${c.form.optional}</span></span></label>
-          <button class="btn primary wide" type="submit">${c.form.submit}</button>
-        </form>` : html`<div class="signup closed"><h3>${c.closedTitle}</h3><p>${c.closedText} <a href="/login">${c.closedLink}</a>.</p></div>`}
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="faq" class="section" aria-labelledby="faq-title">
-  <div class="wrap narrow" data-reveal>
-    <h2 id="faq-title">${c.faqTitle}</h2>
-    ${c.faq.map(([q, a]) => html`<details class="faq"><summary>${q}</summary><p>${a}</p></details>`)}
-  </div>
-</section>
+${sections}
 </main>
 <footer class="site-footer">
   <div class="wrap foot">
-    <p><b>CONARO Business AI</b> · ${c.footer}</p>
+    <p><b>CONARO Business AI</b> · ${T(o, "footer.place", c.footer)}</p>
     <p class="small">${c.partOf} <a href="https://www.conaro.ca">CONARO</a> · <a href="/login">${c.nav.signIn}</a> · <a href="/?lang=${other}" lang="${HTML_LANG[other]}">${c.switchTo}</a> · <span class="placeholder-text">${c.legal}</span></p>
     <details class="credits"><summary>${c.credits}</summary><p class="small">${c.photoNote}</p>
       <ul class="small">${CREDITS.map((k) => html`<li><a href="${k.source}">${k.title}</a> · ${k.author} · ${k.license}${k.changes ? html` · ${k.changes[o.lang]}` : ""}</li>`)}</ul></details>

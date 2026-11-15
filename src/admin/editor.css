@@ -1,0 +1,33 @@
+/* Click-to-edit editor overlay (admin only). */
+.editing { padding-bottom: 72px; }
+.editing [data-reveal], .editing .hero-copy > *, .editing .hero-card { opacity: 1 !important; transform: none !important; }
+.editing .ed { outline: 1px dashed rgb(180 86 27 / .55); outline-offset: 3px; border-radius: 3px; cursor: text; transition: outline-color .15s, background-color .15s; }
+.editing .ed:hover { outline: 2px dashed #b4561b; background: rgb(240 164 107 / .12); }
+.editing .ed:focus { outline: 2px solid #b4561b; background: rgb(255 255 255 / .92); color: #14202e; text-shadow: none; }
+.editing .ed.ed-saving { outline-color: #8a97a8; }
+.editing .ed.ed-saved { outline: 2px solid #2f7d4f; }
+.editing [data-edit-media] { cursor: pointer; outline: 2px dashed rgb(180 86 27 / .7); outline-offset: -4px; }
+.editing [data-edit-media]:hover, .editing [data-edit-media]:focus { outline: 3px solid #b4561b; filter: brightness(1.05); }
+.editing [data-section] { position: relative; outline: 1px dashed rgb(31 63 92 / .25); outline-offset: -6px; }
+.ed-sec-tools { position: absolute; z-index: 20; top: 10px; right: 10px; display: flex; gap: 6px; align-items: center; padding: 6px; border-radius: 10px; background: #14202e; color: #fff;
+  font: 600 .8125rem/1 Inter, system-ui, sans-serif; box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
+.ed-sec-tools span { padding: 0 6px; text-transform: capitalize; }
+.ed-sec-tools button { min-width: 34px; min-height: 32px; border-radius: 7px; border: 1px solid rgb(255 255 255 / .3); background: transparent; color: #fff; font: inherit; cursor: pointer; }
+.ed-sec-tools button:hover:not(:disabled) { background: rgb(255 255 255 / .15); }
+.ed-sec-tools button:disabled { opacity: .35; cursor: default; }
+.ed-hidden-section { position: relative; opacity: .45; }
+.ed-hidden-section > [data-section] { outline: 2px dashed #b42318; }
+#ed-bar { position: fixed; z-index: 100; left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px;
+  border-radius: 16px; background: #14202e; color: #fff; box-shadow: 0 16px 40px rgb(0 0 0 / .35); font: 500 .9375rem/1.3 Inter, system-ui, sans-serif; }
+.ed-brand { font-weight: 800; margin-right: 6px; }
+.ed-status { flex: 1; color: #c9d6e6; min-width: 160px; }
+.ed-status.ok { color: #9be0b4; } .ed-status.bad { color: #ffb4a8; }
+.ed-btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid rgb(255 255 255 / .35); background: transparent; color: #fff;
+  font: 700 .9375rem/1 Inter, system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+.ed-btn:hover { background: rgb(255 255 255 / .12); }
+.ed-btn.primary { background: #f0a46b; border-color: #f0a46b; color: #14202e; }
+.ed-btn.primary:disabled { opacity: .45; cursor: default; }
+.ed-btn:focus-visible, .ed-sec-tools button:focus-visible { outline: 3px solid #f0a46b; outline-offset: 2px; }
+/* In the editor a click on a presenter photo replaces it (the play overlay and captions let clicks through). */
+.editing .stage > :not(img), .editing .moment-photo::after { pointer-events: none; }
+.editing .stage .big-play { display: none !important; }

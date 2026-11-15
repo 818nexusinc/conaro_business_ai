@@ -1,0 +1,14 @@
+/* Platform admin additions to the control centre stylesheet. */
+.admin .side { background: #0f1f33; }
+.admin .side .out { margin-top: 18px; opacity: .85; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+a.button { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 6px; background: #b4561b; color: #fff; font-weight: 600; text-decoration: none; }
+a.button:hover { background: #9a4614; }
+button.small { min-height: 32px; padding: 0 10px; font-size: .875rem; }
+.clip { display: inline-block; max-width: 38ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; }
+.kv dt { font-weight: 600; } .kv dd { margin: 0; }
+.prop { border: 1px solid #dde2e8; border-radius: 12px; padding: 16px; margin-bottom: 14px; background: #fff; }
+.prop h3 { margin: 0 0 6px; }
+@media (prefers-color-scheme: dark) { .prop { background: #17212d; border-color: #2a3644; } }
