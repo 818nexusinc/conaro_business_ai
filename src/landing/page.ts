@@ -27,7 +27,7 @@ export interface LandingOptions {
   /** Admin editor: marks every editable text and image, and loads the editor's toolbar. */
   editing?: { csrf: string; pending: number; canPublish: boolean } | undefined;
   /** Published plan prices and names (admin-managed); without them the built-in catalogue is used. */
-  plans?: Record<string, { priceCents: number | null; name?: Partial<Record<Lang, string>>; features?: Partial<Record<Lang, string[]>> }> | undefined;
+  plans?: Record<string, { priceCents: number | null; name: Record<Lang, string>; features: Record<Lang, string[]>; recommended: boolean }> | undefined;
 }
 
 /** Text that the admin may override. In the editor it is wrapped so it can be clicked and edited in place. */
@@ -64,7 +64,7 @@ const ICON = {
   manage: "M12 3l2.6 5.6 6 .6-4.5 4 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.5-4 6-.6z", front: "M4 5h16v11H9l-5 4z", jobs: "M4 6h16v14H4zM4 10h16M9 3v4M15 3v4",
   money: "M12 3v18M16 7.5c0-1.9-1.8-3-4-3s-4 1.1-4 3 1.8 2.6 4 3 4 1.1 4 3-1.8 3-4 3-4-1.1-4-3", growth: "M3 17l6-6 4 4 8-8M15 7h6v6", office: "M3 6h6l2 2h10v11H3z", rules: "M4 6h16M4 12h10M4 18h6M17 15l2 2 3-4", ok: "M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6l7-3zM9 12l2 2 4-4",
 };
-const planName = (lang: Lang, p: Plan) => (lang === "fr" ? PLAN_NAME_FR[p.id] ?? p.name : p.name);
+const planName = (o: LandingOptions, p: Plan) => o.plans?.[p.id]?.name[o.lang] ?? (o.lang === "fr" ? PLAN_NAME_FR[p.id] ?? p.name : p.name);
 const agentName = (lang: Lang, id: string) => AGENT_COPY.find((a) => a.id === id)?.name[lang] ?? agentDef(id).name.replace(/^AI /, "");
 
 /** A responsive photo: 640 and 1280 px versions (JPEG, served from /media), lazy unless it is above the fold. */
@@ -127,9 +127,9 @@ function agentPanel(o: LandingOptions, a: AgentCopy, selected: boolean, i: numbe
         <ol class="stepper">${a.how[o.lang].map((s, k) => html`<li>${T(o, `agent.${a.id}.how.${k + 1}`, s)}</li>`)}</ol>
         <div class="agent-plans">
           <p class="label">${c.plansIncluding}</p>
-          <ul class="plan-chips">${PLANS.map((p) => included.includes(p) ? html`<li class="on">${svg(ICON.check)}${planName(o.lang, p)}</li>` : "")}</ul>
+          <ul class="plan-chips">${PLANS.map((p) => included.includes(p) ? html`<li class="on">${svg(ICON.check)}${planName(o, p)}</li>` : "")}</ul>
         </div>
-        <a class="btn primary small start-link" href="/?lang=${o.lang}&amp;plan=${first.id}#start" data-choose="${first.id}" data-name="${planName(o.lang, first)}">${c.startWith(planName(o.lang, first))}${svg(ICON.arrow)}</a>
+        <a class="btn primary small start-link" href="/?lang=${o.lang}&amp;plan=${first.id}#start" data-choose="${first.id}" data-name="${planName(o, first)}">${c.startWith(planName(o, first))}${svg(ICON.arrow)}</a>
       </div>
     </div>
     <footer class="agent-nav js-only">
@@ -145,17 +145,20 @@ function planCard(o: LandingOptions, plan: Plan, selected: boolean): Html {
   const c = COPY[o.lang];
   const agents = billableAgents(plan.id).map((id) => agentName(o.lang, id));
   const planned = plan.agents.filter((id) => agentDef(id).status === "planned").map((id) => agentDef(id).name.replace(/^AI /, ""));
-  const features = o.lang === "fr" ? PLAN_FEATURES_FR[plan.id] ?? plan.features : plan.features;
-  const name = planName(o.lang, plan);
-  return html`<article class="plan${selected ? " chosen" : ""}" aria-labelledby="plan-${plan.id}" data-plan-card="${plan.id}" data-reveal>
+  const features = o.plans?.[plan.id]?.features[o.lang] ?? (o.lang === "fr" ? PLAN_FEATURES_FR[plan.id] ?? plan.features : plan.features);
+  const priceCents = o.plans ? o.plans[plan.id]?.priceCents ?? null : plan.priceCents;
+  const recommended = o.plans ? Boolean(o.plans[plan.id]?.recommended) : plan.id === "growth";
+  const money = (cents: number) => { const v = cents / 100; const t = Number.isInteger(v) ? String(v) : v.toFixed(2); return o.lang === "fr" ? `${t.replace(".", ",")} $` : `$${t}`; };
+  const name = planName(o, plan);
+  return html`<article class="plan${selected ? " chosen" : ""}${recommended ? " recommended" : ""}" aria-labelledby="plan-${plan.id}" data-plan-card="${plan.id}" data-reveal>
   <h3 id="plan-${plan.id}">${name}</h3>
-  <p class="price">${plan.priceCents === null ? html`<span class="placeholder">${c.pricePlaceholder}</span>`
-    : o.lang === "fr" ? html`<strong>${(plan.priceCents / 100).toFixed(0)} $</strong><span> ${c.perMonth}</span>` : html`<strong>$${(plan.priceCents / 100).toFixed(0)}</strong><span> ${c.perMonth}</span>`}</p>
+  <p class="price">${priceCents === null ? html`<span class="placeholder">${c.pricePlaceholder}</span>`
+    : html`<strong>${money(priceCents)}</strong><span> ${c.perMonth}</span><span class="tax"> ${c.plusTax}</span>`}</p>
   <p class="count"><strong>${agents.length}</strong> ${c.agentsCount}</p>
   <ul class="ticks">${features.map((f) => html`<li>${svg(ICON.check)}<span>${f}</span></li>`)}</ul>
   <details><summary>${c.allAgents(agents.length)}</summary><ul class="small">${agents.map((a) => html`<li>${a}</li>`)}</ul>
     ${planned.length ? html`<p class="small muted">${c.comingNext(planned.join(", "))}</p>` : ""}</details>
-  <a class="btn ${plan.id === "growth" ? "primary" : "secondary"}" href="/?lang=${o.lang}&amp;plan=${plan.id}#start" data-choose="${plan.id}" data-name="${name}">${c.startWith(name)}</a>
+  <a class="btn ${recommended ? "primary" : "secondary"}" href="/?lang=${o.lang}&amp;plan=${plan.id}#start" data-choose="${plan.id}" data-name="${name}">${c.startWith(name)}</a>
 </article>`;
 }
 
@@ -233,7 +236,7 @@ export function landingPage(o: LandingOptions): string {
         ${o.signupOpen ? html`<form class="signup" method="post" action="/signup?lang=${o.lang}#start" novalidate>
           ${error ? html`<p class="form-error" role="alert">${error}</p>` : ""}
           <input type="hidden" name="lang" value="${o.lang}">
-          <fieldset class="plan-pick"><legend>${c.form.plan}</legend>${PLANS.map((p) => html`<label class="pick"><input type="radio" name="plan" value="${p.id}"${p.id === selected ? html` checked` : ""}><span>${planName(o.lang, p)}</span></label>`)}</fieldset>
+          <fieldset class="plan-pick"><legend>${c.form.plan}</legend>${PLANS.map((p) => html`<label class="pick"><input type="radio" name="plan" value="${p.id}"${p.id === selected ? html` checked` : ""}><span>${planName(o, p)}</span></label>`)}</fieldset>
           <label>${c.form.business}<input name="business" required maxlength="120" autocomplete="organization" value="${v.business ?? ""}"></label>
           <label>${c.form.industry}<select name="industry" required>${INDUSTRY_PACKS.map((p) => html`<option value="${p.id}"${v.industry === p.id ? html` selected` : ""}>${industry(p.id, p.name)}</option>`)}</select></label>
           <label>${c.form.name}<input name="name" required maxlength="120" autocomplete="name" value="${v.name ?? ""}"></label>

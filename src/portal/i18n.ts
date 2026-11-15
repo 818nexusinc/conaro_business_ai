@@ -298,6 +298,7 @@ const PATTERNS: [RegExp, (...m: string[]) => string][] = [
   [/^(\d+)% \((\d+) of (\d+) h\)$/, (_, p, a, b) => `${p} % (${a} sur ${b} h)`],
   [/^— \((\d+) of (\d+) h\)$/, (_, a, b) => `— (${a} sur ${b} h)`],
   [/^(\d+) hours$/, (_, n) => `${n} heures`],
+  [/^([\d\s  .,]+ \$) \/ month$/, (_, p) => `${p} / mois`],
   [/^(\d+) min$/, (_, n) => `${n} min`],
   [/^(\d+) KB$/, (_, n) => `${n} Ko`],
   [/^planned \(phase (\d)\)$/, (_, n) => `prévu (phase ${n})`],

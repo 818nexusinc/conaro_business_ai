@@ -27,8 +27,18 @@ export interface AdminHttp {
   /** The landing page in the editor: draft content, editing marks. */
   editorPage: (lang: "en" | "fr", content: Record<string, string>, editing: { csrf: string; pending: number; canPublish: boolean }) => Promise<string>;
   /** Extra admin sections (plans, billing, agents...) registered by later modules. */
-  extra?: ((ctx: { req: IncomingMessage; res: ServerResponse; path: string; method: string; url: URL; session: AdminSession; form?: URLSearchParams }) => Promise<boolean>)[];
+  extra?: AdminExtra[];
 }
+
+export interface AdminTools {
+  page: (res: ServerResponse, status: number, body: string) => void;
+  redirect: (res: ServerResponse, to: string) => void;
+  send: (res: ServerResponse, status: number, body: string | Buffer, type?: string) => void;
+  ctx: (flash?: string | null, error?: string | null) => A.AdminCtx;
+  can: (p: AdminPermission) => boolean;
+  readRaw: (req: IncomingMessage, max: number) => Promise<Buffer>;
+}
+export type AdminExtra = (c: { req: IncomingMessage; res: ServerResponse; path: string; method: string; url: URL; session: AdminSession; form?: URLSearchParams }, t: AdminTools) => Promise<boolean>;
 
 const ADMIN_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 const EDITOR_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' blob:; media-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
@@ -99,6 +109,7 @@ export function adminRoutes(db: Db, h: AdminHttp) {
     }
     const need = (p: AdminPermission) => adminCan(session.role, p);
     const ctx = (flash?: string | null, error?: string | null): A.AdminCtx => ({ session, path, flash: flash ?? undefined, error: error ?? undefined });
+    const tools: AdminTools = { page: (r, st, b) => page(r, st, b), redirect: h.redirect, send: h.send, ctx, can: need, readRaw: h.readRaw };
 
     // ---------------------------------------------------------------- editor JSON API (CSRF in a header)
     if (path.startsWith("/admin/api/")) {
@@ -159,9 +170,9 @@ export function adminRoutes(db: Db, h: AdminHttp) {
           await createAdmin(db, { email: f.get("email") ?? "", name: f.get("name") ?? "", password: f.get("password") ?? "", role }, `admin:${session.adminId}`);
           back("/admin/admins", "Admin added."); return true;
         }
-        for (const x of h.extra ?? []) if (await x({ req, res, path, method, url, session, form: f })) return true;
+        for (const x of h.extra ?? []) if (await x({ req, res, path, method, url, session, form: f }, tools)) return true;
       } catch (err) {
-        if (err instanceof PermanentError) { back(path.startsWith("/admin/do/admin") ? "/admin/admins" : (f.get("_back") ?? "/admin"), err.message, true); return true; }
+        if (err instanceof PermanentError) { back(path.startsWith("/admin/do/admin") ? "/admin/admins" : (f.get("_back")?.startsWith("/admin") ? f.get("_back")! : "/admin"), err.message, true); return true; }
         throw err;
       }
       h.send(res, 404, "Not found", "text/plain"); return true;
@@ -189,7 +200,7 @@ export function adminRoutes(db: Db, h: AdminHttp) {
       page(res, 200, A.adminsPage(ctx(flash, error), await db.query("select email, display_name, role, status, created_at from bai_platform_admins order by created_at"))); return true;
     }
     if (path === "/admin/audit") { page(res, 200, A.auditPage(ctx(flash, error), await db.query("select occurred_at, actor, action, subject, detail from bai_admin_audit order by id desc limit 300"))); return true; }
-    for (const x of h.extra ?? []) if (await x({ req, res, path, method, url, session })) return true;
+    for (const x of h.extra ?? []) if (await x({ req, res, path, method, url, session }, tools)) return true;
     if (["/admin/plans", "/admin/billing", "/admin/businesses", "/admin/agents"].includes(path)) {
       page(res, 200, A.placeholderPage(ctx(flash, error), path.slice(7).replace(/^\w/, (c) => c.toUpperCase()), "This section is being built."));
       return true;

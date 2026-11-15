@@ -57,6 +57,8 @@ import { currentLang, runInLang, translateHtml, translatePlain } from "./i18n.ts
 import { signUp } from "../landing/signup.ts";
 import { adminRoutes } from "../admin/server.ts";
 import { publishedContent } from "../admin/content.ts";
+import { plansAdmin } from "../admin/plans-admin.ts";
+import { publishedPlans } from "../admin/plans.ts";
 
 const MANROPE = Buffer.from(MANROPE_WOFF2_BASE64, "base64");
 const COOKIE = "bai_session";
@@ -152,10 +154,11 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
   const landingBase = () => ({ signupOpen: Boolean(opts.landing?.signupOpen), videoBase: opts.landing?.videoBase, audioBase: opts.landing?.audioBase, frReviewedBy: opts.landing?.frReviewedBy });
   const sendLanding = async (res: ServerResponse, lang: Lang, status: number, values: Record<string, string>, error?: string, plan?: string) => {
     const content = await publishedContent(db, lang);
+    const plans = await publishedPlans(db);
     res.setHeader("Content-Security-Policy", LANDING_CSP);
     res.setHeader("Content-Language", lang === "fr" ? "fr-CA" : "en-CA");
     res.setHeader("Vary", "Cookie, Accept-Language");
-    return send(res, status, landingPage({ lang, ...landingBase(), values, error, plan, content }), "text/html; charset=utf-8", false);
+    return send(res, status, landingPage({ lang, ...landingBase(), values, error, plan, content, plans }), "text/html; charset=utf-8", false);
   };
   const readRaw = async (req: IncomingMessage, max: number): Promise<Buffer> => {
     let size = 0; const chunks: Buffer[] = [];
@@ -165,7 +168,8 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
   const admin = adminRoutes(db, {
     send: (res, status, body, type = "text/html; charset=utf-8") => { res.statusCode = status; res.setHeader("Content-Type", type); res.end(body); },
     redirect, readForm, readRaw, cookie, addCookie, ip, secure, setupKey: opts.setupKey,
-    editorPage: async (lang, content, editing) => landingPage({ lang, ...landingBase(), content, editing }),
+    editorPage: async (lang, content, editing) => landingPage({ lang, ...landingBase(), content, editing, plans: await publishedPlans(db) }),
+    extra: [plansAdmin(db)],
   });
 
   const ACTIONS: Record<string, Action> = {
@@ -477,9 +481,10 @@ ${P.credentialsTable(r.credentials)}`));
     if (!page) return send(res, 404, "Not found", "text/plain");
     const perm = PAGE_PERMS[path];
     if (perm && !can(session.role, perm)) return send(res, 403, "Not allowed for your role.", "text/plain");
+    const livePlans = path === "/plan" ? await publishedPlans(db) : undefined;
     const body = await withTenant(db, session.tenantId, async (tdb) => {
       const tenant = (await tdb.query<P.PortalCtx["tenant"]>("select name, industry, paused, paused_reason, time_zone, is_demo from bai_tenants"))[0]!;
-      return page({ session, tdb, deps, path, query: url.searchParams, flash: url.searchParams.get("ok")?.slice(0, 300), error: url.searchParams.get("err")?.slice(0, 300), tenant });
+      return page({ session, tdb, deps, path, query: url.searchParams, flash: url.searchParams.get("ok")?.slice(0, 300), error: url.searchParams.get("err")?.slice(0, 300), tenant, plans: livePlans });
     });
     return send(res, 200, body);
   }

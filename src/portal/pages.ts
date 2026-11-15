@@ -26,6 +26,8 @@ export interface PortalCtx {
   flash?: string | undefined;
   error?: string | undefined;
   tenant: { name: string; industry: string; paused: boolean; paused_reason: string | null; time_zone: string; is_demo: boolean };
+  /** Published plan names, prices and features (platform admin); absent = the built-in catalogue. */
+  plans?: Record<string, { priceCents: number | null; name: { en: string; fr: string }; features: { en: string[]; fr: string[] } }> | undefined;
 }
 
 const NAV: { href: string; label: string; perm?: Parameters<typeof can>[1] }[] = [
@@ -419,16 +421,20 @@ export async function planPage(ctx: PortalCtx): Promise<string> {
   const sub = await one<{ plan: string; status: string; addons: string[]; billing_status: string }>(ctx.tdb, "select plan, status, addons, billing_status from bai_subscriptions");
   const usage = await usageThisMonth(ctx.tdb);
   const plan = planFor(sub.plan);
+  const fr = currentLang() === "fr";
+  const nameOf = (id: string, fallback: string) => ctx.plans?.[id]?.name[fr ? "fr" : "en"] ?? fallback;
+  const priceOf = (id: string, fallback: number | null) => (ctx.plans ? ctx.plans[id]?.priceCents ?? null : fallback);
+  const featuresOf = (id: string, fallback: readonly string[]) => ctx.plans?.[id]?.features[fr ? "fr" : "en"] ?? fallback;
   return layout(ctx, "Plan and usage", html`
-<div class="cards"><div class="card"><div class="muted">Plan</div><strong>${plan.name}</strong></div><div class="card"><div class="muted">Status</div><strong>${sub.status}</strong></div>
+<div class="cards"><div class="card"><div class="muted">Plan</div><strong>${nameOf(plan.id, plan.name)}</strong></div><div class="card"><div class="muted">Status</div><strong>${sub.status}</strong></div>
 <div class="card"><div class="muted">Billing</div><strong>${sub.billing_status === "not_connected" ? "not connected" : sub.billing_status}</strong></div><div class="card"><div class="muted">Agents you pay for</div><strong>${billableAgents(sub.plan, sub.addons).length}</strong></div></div>
 <p class="muted">Agents marked "planned" are not available yet and are never charged. Subscription charges are separate from advertising spend, payment processing fees and third-party charges.</p>
 <h2>This month's usage</h2>${table(["Measure", "Used", "Plan limit"], [
     [html`AI calls`, html`${usage.ai_calls ?? 0}`, html`${plan.limits.aiCallsPerMonth}`],
     [html`External actions`, html`${usage.external_actions ?? 0}`, html`${plan.limits.externalActionsPerMonth}`],
     [html`Workflow runs`, html`${usage.workflow_runs ?? 0}`, html`—`]])}
-<h2>Plans</h2>${table(["Plan", "Price", "Working agents", "Includes", ""], PLANS.map((p) => [html`<strong>${p.name}</strong>`, html`${p.priceCents === null ? "price not set" : money(p.priceCents)}`,
-    html`${billableAgents(p.id).length}`, html`${p.features.join("; ")}`,
+<h2>Plans</h2>${table(["Plan", "Price", "Working agents", "Includes", ""], PLANS.map((p) => [html`<strong>${nameOf(p.id, p.name)}</strong>`, html`${priceOf(p.id, p.priceCents) === null ? "price not set" : `${money(priceOf(p.id, p.priceCents))} / month`}`,
+    html`${billableAgents(p.id).length}`, html`${featuresOf(p.id, p.features).join("; ")}`,
     p.id !== sub.plan && can(ctx.session.role, "plan.change") ? html`<form method="post" action="/do/plan">${csrf(ctx)}<input type="hidden" name="plan" value="${p.id}"><button class="secondary" type="submit">Switch</button></form>` : p.id === sub.plan ? badge("current", "ok") : html``]))}`);
 }
 
