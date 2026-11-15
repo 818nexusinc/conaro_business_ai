@@ -35,6 +35,12 @@ const EnvSchema = z.object({
   BAI_PRESENTER_AUDIO_BASE: z.string().url().optional(),
   /** Name of the fluent reviewer who approved the French copy. Until set, French pages say the translation is under review. */
   BAI_FR_REVIEWED_BY: z.string().min(2).max(120).optional(),
+  /** Stripe subscription billing. Test keys (sk_test_/rk_test_) only, unless the owner approves live charging below. */
+  STRIPE_SECRET_KEY: z.string().regex(/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/, "must be a Stripe secret or restricted key").optional(),
+  /** Signing secret of the Stripe webhook endpoint (/api/billing/stripe/webhook). */
+  STRIPE_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9]+$/, "must start with whsec_").optional(),
+  /** Name of the owner who approved real (live-mode) charging. Without it live keys and live events are refused. */
+  BAI_STRIPE_LIVE_APPROVED_BY: z.string().min(2).max(120).optional(),
   /** Set by Vercel on its deployments. */
   VERCEL: z.string().optional(),
   VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),

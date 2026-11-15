@@ -39,6 +39,9 @@ Vercel's limits ([R60](REFERENCE_CHECKS.md)): **Hobby** allows cron jobs **once 
    | `BAI_SIGNUP` | optional; `open` (default) lets businesses create a pilot workspace from the landing page, `closed` pauses sign-ups |
    | `BAI_PRESENTER_VIDEO_BASE` | optional; folder with the explainer videos, `<lang>/<key>.mp4` + `.jpg` ([PRESENTER_SCRIPTS.md](PRESENTER_SCRIPTS.md)) |
    | `BAI_PRESENTER_AUDIO_BASE` | optional; folder with recorded natural-voice narration, `<lang>/<key>.mp3`. Without video or narration the visitor's device reads each script with its most natural voice, with captions |
+   | `STRIPE_SECRET_KEY` | optional; Stripe **test** key for plan subscriptions (`sk_test_…`); see [ADMIN.md](ADMIN.md) |
+   | `STRIPE_WEBHOOK_SECRET` | optional; signing secret of the webhook endpoint `/api/billing/stripe/webhook` |
+   | `BAI_STRIPE_LIVE_APPROVED_BY` | leave empty; the owner's name only when real charging is approved |
    | `BAI_FR_REVIEWED_BY` | optional; name of the fluent reader who reviewed the French page. Until set, the French page shows "Version française en cours de révision." |
 
 3. **Deploy.** Push to `main`, or select **Redeploy** in Vercel. The build runs `npm run build`.

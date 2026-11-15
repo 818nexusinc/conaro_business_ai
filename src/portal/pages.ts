@@ -27,7 +27,9 @@ export interface PortalCtx {
   error?: string | undefined;
   tenant: { name: string; industry: string; paused: boolean; paused_reason: string | null; time_zone: string; is_demo: boolean };
   /** Published plan names, prices and features (platform admin); absent = the built-in catalogue. */
-  plans?: Record<string, { priceCents: number | null; name: { en: string; fr: string }; features: { en: string[]; fr: string[] } }> | undefined;
+  plans?: Record<string, { priceCents: number | null; name: { en: string; fr: string }; features: { en: string[]; fr: string[] }; stripePriceId?: string | null }> | undefined;
+  /** Stripe billing for the plan page. */
+  billing?: { problem: string | null; mode: "test" | "live" | null; account: { stripe_customer_id: string | null; stripe_status: string | null; plan: string | null } | null } | undefined;
 }
 
 const NAV: { href: string; label: string; perm?: Parameters<typeof can>[1] }[] = [
@@ -417,6 +419,20 @@ export async function integrationsPage(ctx: PortalCtx): Promise<string> {
 ${table(["Service", "Status", "Detail", "Last checked"], rows.map((r) => [html`${r.provider}`, statusBadge(r.status === "operational" ? "active" : r.status === "not_connected" ? "cancelled" : r.status), html`${r.detail || "Not connected"}`, html`${when(r.checked_at)}`]))}`);
 }
 
+function billingPanel(ctx: PortalCtx, plan: string): Html {
+  const b = ctx.billing;
+  if (!b || b.problem) return html`<section class="panel"><h2>Billing</h2><p class="muted">Card billing is not switched on yet, so nothing is charged.</p></section>`;
+  const owner = can(ctx.session.role, "plan.change");
+  const linked = Boolean(ctx.plans?.[plan]?.stripePriceId);
+  return html`<section class="panel"><h2>Billing</h2>
+${b.mode === "test" ? html`<p>${badge("Stripe test mode", "warn")} No real money moves: use Stripe's test card 4242 4242 4242 4242 with any future date and any CVC.</p>` : html`<p>${badge("Stripe live", "ok")}</p>`}
+${b.account?.stripe_customer_id ? html`<p>Stripe subscription: <strong>${b.account.stripe_status ?? "pending"}</strong></p>
+${owner ? html`<form method="post" action="/do/billing-portal">${csrf(ctx)}<button class="secondary" type="submit">Manage billing in Stripe</button></form>` : ""}`
+    : owner ? linked ? html`<form method="post" action="/do/checkout">${csrf(ctx)}<input type="hidden" name="plan" value="${plan}"><button type="submit">Subscribe with a card</button></form>`
+      : html`<p class="muted">Your plan is not available for card payment yet.</p>` : html`<p class="muted">Only the owner can set up billing.</p>`}
+</section>`;
+}
+
 export async function planPage(ctx: PortalCtx): Promise<string> {
   const sub = await one<{ plan: string; status: string; addons: string[]; billing_status: string }>(ctx.tdb, "select plan, status, addons, billing_status from bai_subscriptions");
   const usage = await usageThisMonth(ctx.tdb);
@@ -428,6 +444,7 @@ export async function planPage(ctx: PortalCtx): Promise<string> {
   return layout(ctx, "Plan and usage", html`
 <div class="cards"><div class="card"><div class="muted">Plan</div><strong>${nameOf(plan.id, plan.name)}</strong></div><div class="card"><div class="muted">Status</div><strong>${sub.status}</strong></div>
 <div class="card"><div class="muted">Billing</div><strong>${sub.billing_status === "not_connected" ? "not connected" : sub.billing_status}</strong></div><div class="card"><div class="muted">Agents you pay for</div><strong>${billableAgents(sub.plan, sub.addons).length}</strong></div></div>
+${billingPanel(ctx, sub.plan)}
 <p class="muted">Agents marked "planned" are not available yet and are never charged. Subscription charges are separate from advertising spend, payment processing fees and third-party charges.</p>
 <h2>This month's usage</h2>${table(["Measure", "Used", "Plan limit"], [
     [html`AI calls`, html`${usage.ai_calls ?? 0}`, html`${plan.limits.aiCallsPerMonth}`],

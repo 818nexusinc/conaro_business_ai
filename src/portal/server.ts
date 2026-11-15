@@ -59,6 +59,9 @@ import { adminRoutes } from "../admin/server.ts";
 import { publishedContent } from "../admin/content.ts";
 import { plansAdmin } from "../admin/plans-admin.ts";
 import { publishedPlans } from "../admin/plans.ts";
+import { billingAdmin } from "../admin/billing-admin.ts";
+import { applyStripeEvent, billingAccount } from "../billing/service.ts";
+import { billingProblem, keyMode, stripeClient, verifyWebhook, type Fetch, type StripeConfig } from "../billing/stripe.ts";
 
 const MANROPE = Buffer.from(MANROPE_WOFF2_BASE64, "base64");
 const COOKIE = "bai_session";
@@ -82,10 +85,16 @@ export interface PortalOptions {
   setupKey?: string;
   /** The public landing page at / (signed-out visitors) and self-serve pilot sign-up. */
   landing?: { signupOpen: boolean; videoBase?: string; audioBase?: string; frReviewedBy?: string };
+  /** Stripe subscription billing (test mode unless live charging is approved). */
+  billing?: StripeConfig;
+  /** For tests: replaces the HTTP client used to call Stripe. */
+  stripeFetch?: Fetch;
+  /** Public address of this app (Stripe return addresses, webhook address shown to admins). */
+  publicUrl?: string;
 }
 
 function headers(res: ServerResponse, secure: boolean) {
-  res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'none'; base-uri 'none'");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "same-origin");
@@ -169,7 +178,7 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
     send: (res, status, body, type = "text/html; charset=utf-8") => { res.statusCode = status; res.setHeader("Content-Type", type); res.end(body); },
     redirect, readForm, readRaw, cookie, addCookie, ip, secure, setupKey: opts.setupKey,
     editorPage: async (lang, content, editing) => landingPage({ lang, ...landingBase(), content, editing, plans: await publishedPlans(db) }),
-    extra: [plansAdmin(db)],
+    extra: [plansAdmin(db), billingAdmin(db, { config: opts.billing, publicUrl: opts.publicUrl })],
   });
 
   const ACTIONS: Record<string, Action> = {
@@ -334,6 +343,18 @@ export function createPortalHandler(opts: PortalOptions): RequestListener {
       return send(res, 200, P.bilingualPage("Unsubscribe", `Stop marketing messages from ${name} to ${v.email}?`, P.raw(`<form method="post"><button type="submit">Unsubscribe / Se désabonner</button></form>`)));
     }
 
+    // Stripe webhook: signature-verified, processed once per event. Live events are refused unless approved.
+    if (path === "/api/billing/stripe/webhook") {
+      if (method !== "POST") return send(res, 405, JSON.stringify({ error: "POST only" }), "application/json");
+      if (!opts.billing?.webhookSecret) return send(res, 503, JSON.stringify({ error: "webhook not configured (STRIPE_WEBHOOK_SECRET)" }), "application/json");
+      const raw = (await readRaw(req, 1_000_000)).toString("utf8");
+      let event;
+      try { event = verifyWebhook(raw, String(req.headers["stripe-signature"] ?? "") || undefined, opts.billing.webhookSecret); }
+      catch (err) { return send(res, 400, JSON.stringify({ error: (err as Error).message }), "application/json"); }
+      const outcome = await applyStripeEvent(db, event, { allowLive: Boolean(opts.billing.liveApprovedBy) });
+      return send(res, 200, JSON.stringify({ received: true, outcome }), "application/json");
+    }
+
     // Scheduled agents' cycle. Vercel Cron sends "Authorization: Bearer $CRON_SECRET" with a GET.
     if (path === "/api/cron/tick") {
       if (method !== "GET") return send(res, 405, JSON.stringify({ error: "GET only" }), "application/json");
@@ -457,6 +478,33 @@ ${P.credentialsTable(r.credentials)}`));
         addCookie(res, `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? "; Secure" : ""}`);
         return redirect(res, "/login");
       }
+      // Billing: an owner subscribes through Stripe Checkout or manages billing in Stripe's portal.
+      if (path === "/do/checkout" || path === "/do/billing-portal") {
+        if (!can(session.role, "plan.change")) return send(res, 403, "Not allowed for your role.", "text/plain");
+        const back = (msg: string) => redirect(res, `/plan?err=${encodeURIComponent(msg)}`);
+        const problem = billingProblem(opts.billing);
+        if (problem || !opts.billing) return back(problem ?? "Billing is not configured.");
+        const client = stripeClient(opts.billing, opts.stripeFetch);
+        const site = (opts.publicUrl ?? `http://${req.headers.host}`).replace(/\/$/, "");
+        try {
+          const account = await billingAccount(db, session.tenantId);
+          if (path === "/do/billing-portal") {
+            if (!account?.stripe_customer_id) return back("There is no Stripe billing account yet.");
+            const p = await client.createPortalSession({ customer: account.stripe_customer_id, returnUrl: `${site}/plan` });
+            return redirect(res, p.url);
+          }
+          const plan = f.get("plan") ?? "";
+          const priceId = (await publishedPlans(db))[plan]?.stripePriceId;
+          if (!priceId) return back("This plan is not linked to a Stripe price yet.");
+          const s = await client.createCheckoutSession({ priceId, tenantId: session.tenantId, plan, email: session.email, customer: account?.stripe_customer_id ?? undefined,
+            successUrl: `${site}/plan?ok=${encodeURIComponent("Thank you. Stripe confirms the subscription in a moment.")}`, cancelUrl: `${site}/plan` });
+          await withTenant(db, session.tenantId, (t) => tenantAudit(t, { actor: `user:${session.userId}`, action: "billing.checkout_started", subjectType: "subscription", subjectId: session.tenantId, detail: { plan, session: s.id, mode: client.mode } }));
+          return redirect(res, s.url);
+        } catch (err) {
+          if (err instanceof PermanentError) return back(err.message);
+          throw err;
+        }
+      }
       if (path === "/do/member") {
         if (!can(session.role, "members.add")) return send(res, 403, "Not allowed for your role.", "text/plain");
         try {
@@ -482,9 +530,10 @@ ${P.credentialsTable(r.credentials)}`));
     const perm = PAGE_PERMS[path];
     if (perm && !can(session.role, perm)) return send(res, 403, "Not allowed for your role.", "text/plain");
     const livePlans = path === "/plan" ? await publishedPlans(db) : undefined;
+    const liveBilling = path === "/plan" ? { problem: billingProblem(opts.billing), mode: opts.billing ? keyMode(opts.billing.secretKey) : null, account: await billingAccount(db, session.tenantId) } : undefined;
     const body = await withTenant(db, session.tenantId, async (tdb) => {
       const tenant = (await tdb.query<P.PortalCtx["tenant"]>("select name, industry, paused, paused_reason, time_zone, is_demo from bai_tenants"))[0]!;
-      return page({ session, tdb, deps, path, query: url.searchParams, flash: url.searchParams.get("ok")?.slice(0, 300), error: url.searchParams.get("err")?.slice(0, 300), tenant, plans: livePlans });
+      return page({ session, tdb, deps, path, query: url.searchParams, flash: url.searchParams.get("ok")?.slice(0, 300), error: url.searchParams.get("err")?.slice(0, 300), tenant, plans: livePlans, billing: liveBilling });
     });
     return send(res, 200, body);
   }
